@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": [], "lib": ["ES2024", "DOM"], "noEmit": true },
+  "include": ["src/dependency-viewer.ts"]
+}

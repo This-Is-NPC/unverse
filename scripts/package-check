@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { build } from "esbuild";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { installConsumer, run } from "./lib/consumer.mjs";
+import { scenes, stageScenes, startBrowser } from "./lib/scenes.mjs";
+import { withPostgres } from "./lib/postgres.mjs";
+import { checkViewer } from "./lib/viewer-check.mjs";
+
+const root = process.env.MISE_PROJECT_ROOT ?? process.cwd();
+const consumer = installConsumer(root);
+let browser;
+let installedGraph;
+try {
+  const environment = await stageScenes(root, consumer);
+  assert.match(run(consumer.executable, ["--help"], consumer.directory), /check role/);
+  for (const scene of scenes.slice(1).filter((scene) => scene.render === undefined)) {
+    const result = JSON.parse(run(consumer.executable, [...scene.args, "--json"], consumer.directory, environment));
+    assert.equal(result.status, "ok");
+    assert.equal(result.environment.name, "dev");
+    if (scene.name === "25-dependency-graph") installedGraph = result.data.graph;
+    if (scene.name === "11-transfer-export") writeFileSync(resolve(consumer.directory, "manifest.json"), JSON.stringify(result));
+    if (scene.name === "19-seed-plan" || scene.name === "20-transfer-plan") {
+      const file = `${scene.name}.json`;
+      writeFileSync(resolve(consumer.directory, file), JSON.stringify(result));
+      const output = JSON.parse(run(consumer.executable, [scene.name === "19-seed-plan" ? "seed" : "transfer", "apply", "--env", "dev", "--plan-file", file, "--confirm", "--json"], consumer.directory, scene.name === "19-seed-plan" ? { ...environment, FIXTURE_DATA_FILE: resolve(consumer.directory, "seed-data.json") } : environment));
+      assert.equal(output.status, "ok");
+      assert.equal(output.data.checkpoint.state, "verified-resume");
+    }
+  }
+  const csv = run(consumer.executable, ["apps", "list", "--env", "dev", "--csv"], consumer.directory, environment);
+  assert.match(csv, /^"command","status","environment"/);
+  await withPostgres(async (connection) => {
+    const postgres = `postgresql://unverse@localhost/postgres?host=${encodeURIComponent(connection.host)}&sslmode=disable`;
+    const env = { ...environment, FIXTURE_POSTGRES: postgres };
+    for (const command of ["import", "verify"]) {
+      const result = JSON.parse(run(consumer.executable, ["transfer", command, "--env", "dev", "--manifest-file", "manifest.json", ...(command === "import" ? ["--confirm"] : []), "--json"], consumer.directory, env));
+      assert.equal(result.status, "ok");
+      assert.equal(result.data.verified, true);
+    }
+  });
+  run(process.execPath, ["--input-type=module", "-e", 'import {parseConfig} from "@unverse/core"; import {DataverseClient} from "@unverse/dataverse"; if (typeof parseConfig !== "function" || typeof DataverseClient !== "function") process.exit(1);'], consumer.directory);
+  const bundle = await build({ stdin: { contents: 'export * from "@unverse/core";', resolveDir: consumer.directory }, bundle: true, platform: "browser", format: "iife", globalName: "UnverseBrowser", write: false, metafile: true });
+  assert.ok(Object.keys(bundle.metafile.inputs).every((path) => !/azure|node:/.test(path)));
+  browser = await startBrowser(root);
+  const page = await browser.newPage();
+  await page.route("**/*", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Offline core consumer</title>" }));
+  await page.goto("https://offline.unverse.invalid/");
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  const exitCode = await page.evaluate(() => globalThis.UnverseBrowser.exitCodeFor({ status: "failed" }));
+  assert.equal(exitCode, 1);
+  const digest = await page.evaluate(() => globalThis.UnverseBrowser.fingerprint({ tested: true }));
+  assert.match(digest, /^[a-f0-9]{64}$/);
+  const analysis = await page.evaluate((graph) => globalThis.UnverseBrowser.analyzeDependencies(graph), installedGraph);
+  assert.equal(analysis.affected.length, 4);
+  assert.equal(analysis.cycles.length, 1);
+  const visual = scenes.find((scene) => scene.render === "html");
+  const html = run(consumer.executable, visual.args, consumer.directory, environment);
+  assert.equal(await page.evaluate((graph) => globalThis.UnverseBrowser.dependencyHtml(graph), installedGraph), html);
+  const viewerPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await checkViewer(viewerPage, html, installedGraph);
+  const mermaid = run(consumer.executable, visual.args.map((argument) => argument === "--html" ? "--mermaid" : argument), consumer.directory, environment);
+  assert.match(mermaid, /^flowchart LR/);
+  const svg = run(consumer.executable, scenes.find((scene) => scene.render === "svg").args, consumer.directory, environment);
+  assert.match(svg, /^<svg [^>]*class="pele pele-flowchart"/);
+  const browserSvg = await page.evaluate((graph) => globalThis.UnverseBrowser.dependencySvg(graph), installedGraph);
+  const labels = (text) => [...text.matchAll(/<text class="pele-label"[^>]*>(.*?)<\/text>/g)].map((match) => match[1]).sort();
+  assert.deepEqual(labels(browserSvg), labels(svg));
+  assert.ok(browserSvg.includes("Observed dependency graph · complete"));
+  console.log("Packed packages, all installed diagnostics, public exports, and Chromium core consumer verified offline.");
+} finally {
+  await browser?.close();
+  consumer.dispose();
+}

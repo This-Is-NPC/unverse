@@ -1,0 +1,21 @@
+{
+  "configVersion": 1,
+  "environments": {
+    "test": {
+      "url": "https://synthetic-test.crm.dynamics.com",
+      "tenantIdEnv": "FIXTURE_TENANT",
+      "clientIdEnv": "FIXTURE_CLIENT",
+      "clientSecretEnv": "FIXTURE_SECRET"
+    },
+    "dev": {
+      "url": "https://synthetic.crm.dynamics.com",
+      "tenantIdEnv": "FIXTURE_TENANT",
+      "clientIdEnv": "FIXTURE_CLIENT",
+      "clientSecretEnv": "FIXTURE_SECRET",
+      "postgres": {
+        "connectionStringEnv": "FIXTURE_POSTGRES",
+        "schema": "installed_fixture"
+      }
+    }
+  }
+}

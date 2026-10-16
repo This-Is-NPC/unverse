@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+./node_modules/.bin/tsc --build "packages/$1/tsconfig.json" --pretty false
+cp LICENSE "packages/$1/dist/LICENSE"

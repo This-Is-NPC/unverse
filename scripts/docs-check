@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, extname, normalize, relative, resolve } from "node:path";
+
+const root = process.env.MISE_PROJECT_ROOT ?? process.cwd();
+const markdownFiles = collectMarkdown(root).sort();
+const failures = [];
+
+const cliReference = resolve(root, "docs/cli.md");
+const generatedCliReference = runCliReferenceGenerator(root);
+if (!existsSync(cliReference) || readFileSync(cliReference, "utf8") !== generatedCliReference) {
+  failures.push("docs/cli.md is stale; run mise run docs-cli.");
+}
+
+for (const file of markdownFiles) {
+  const document = readFileSync(file, "utf8");
+  for (const link of markdownLinks(document)) {
+    if (isExternal(link)) continue;
+
+    const [location, fragment] = link.split("#", 2);
+    const target = location === "" ? file : resolve(dirname(file), location);
+    if (!isInsideRoot(root, target) || !existsSync(target)) {
+      failures.push(`${display(root, file)} links to missing ${link}`);
+      continue;
+    }
+
+    if (fragment !== undefined && extname(target) === ".md") {
+      const anchors = anchorsFor(readFileSync(target, "utf8"));
+      if (!anchors.has(fragment)) {
+        failures.push(`${display(root, file)} links to missing anchor ${link}`);
+      }
+    }
+  }
+}
+
+if (failures.length > 0) {
+  console.error(failures.join("\n"));
+  process.exitCode = 1;
+}
+
+function collectMarkdown(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (["node_modules", ".git", "dist", ".cache", "release"].includes(entry.name)) {
+      return [];
+    }
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return collectMarkdown(path);
+    return entry.isFile() && extname(entry.name) === ".md" ? [path] : [];
+  });
+}
+
+function markdownLinks(document) {
+  return [...document.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)].map(
+    (match) => match[1],
+  );
+}
+
+function isExternal(link) {
+  return /^(?:[a-z][a-z+.-]*:|\/\/)/i.test(link) || link.startsWith("mailto:");
+}
+
+function anchorsFor(document) {
+  const used = new Map();
+  const anchors = new Set();
+  for (const line of document.split("\n")) {
+    const heading = /^(?:#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (heading?.[1] === undefined) continue;
+    const base = heading[1]
+      .replace(/[`*_~]/g, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .trim()
+      .replace(/\s+/g, "-");
+    const count = used.get(base) ?? 0;
+    used.set(base, count + 1);
+    anchors.add(count === 0 ? base : `${base}-${count}`);
+  }
+  return anchors;
+}
+
+function isInsideRoot(rootDirectory, target) {
+  const path = relative(rootDirectory, normalize(target));
+  return path !== "" && !path.startsWith("..") && !path.startsWith("/");
+}
+
+function display(rootDirectory, file) {
+  return basename(rootDirectory) === "" ? file : relative(rootDirectory, file);
+}
+
+function runCliReferenceGenerator(rootDirectory) {
+  const result = spawnSync(process.execPath, [
+    "packages/cli/dist/generate-cli-docs.js",
+    "--stdout",
+  ], { cwd: rootDirectory, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(result.stderr);
+  }
+  return result.stdout;
+}

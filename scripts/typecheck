@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+./node_modules/.bin/tsc --noEmit --pretty false --project packages/core/tsconfig.json
+./node_modules/.bin/tsc --pretty false --project packages/core/tsconfig.viewer.json
+./node_modules/.bin/tsc --noEmit --pretty false --project packages/dataverse/tsconfig.json
+./node_modules/.bin/tsc --noEmit --pretty false --project packages/cli/tsconfig.json
+./node_modules/.bin/tsc --noEmit --pretty false --project packages/postgres/tsconfig.json

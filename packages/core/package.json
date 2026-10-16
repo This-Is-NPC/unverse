@@ -1,0 +1,25 @@
+{
+  "name": "@unverse/core",
+  "version": "0.5.0-rc.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist/*.js",
+    "dist/*.js.map",
+    "dist/*.d.ts",
+    "dist/LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=24.22.0 <25"
+  },
+  "dependencies": {
+    "pele": "1.6.0"
+  }
+}

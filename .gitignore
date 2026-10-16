@@ -1,0 +1,15 @@
+node_modules/
+packages/*/dist/
+*.tsbuildinfo
+coverage/
+release/
+exports/
+.mise/
+.cache/
+.env
+.env.*
+!.env.example
+unverse.config.json
+*.log
+*.tmp
+.DS_Store

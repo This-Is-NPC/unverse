@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/dataverse"
+    },
+    {
+      "path": "./packages/cli"
+    },
+    {
+      "path": "./packages/postgres"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { fetchTransport } from "../packages/cli/dist/node-dataverse.js";
+import { query, tables, userRoles } from "../packages/dataverse/dist/index.js";
+import { connectDev, reportLiveError } from "./lib/dev.mjs";
+
+try {
+  let requests = 0;
+  const { client } = connectDev(1, {
+    get: async (url, headers) => {
+      requests += 1;
+      return fetchTransport.get(url, headers);
+    },
+  });
+  const identity = await client.whoAmI();
+  assert.ok(identity.applicationUserId && identity.organizationId && identity.businessUnitId);
+  console.log("Observed DEV: WhoAmI returned organization, caller, and business unit.");
+  const assignments = await userRoles(client, { field: "id", value: identity.applicationUserId });
+  console.log(`Observed DEV: caller role investigation completed (${assignments.roles.length} deduplicated roles).`);
+  const definitions = await tables(client, "account");
+  const account = definitions.find((table) => table.logicalName === "account");
+  assert.ok(account?.entitySet && account.primaryKey, "The account table must expose its entity set and primary key.");
+  console.log("Observed DEV: account metadata exposed an entity set and primary key.");
+  const records = await query(client, {
+    table: "account",
+    select: [account.primaryKey],
+    orderBy: `${account.primaryKey} asc`,
+    limit: 2,
+  });
+  console.log(`Observed DEV: read-only query returned ${records.rows.length} rows; complete=${records.complete}; requested page size=1.`);
+  const before = requests;
+  const users = await query(client, { table: "systemuser", select: ["systemuserid"], orderBy: "systemuserid asc", limit: 2 });
+  assert.equal(users.rows.length, 2, "The dedicated environment needs two system users to exercise read pagination.");
+  assert.ok(requests - before >= 3, "The metadata read and two data pages must be observed.");
+  console.log("Observed DEV: two system-user IDs read across at least two data pages; no IDs logged.");
+  console.log("Only reads were issued. No credentials, URLs, user names, IDs, or record values were logged.");
+} catch (error) {
+  reportLiveError(error);
+  console.error("No writes were issued.");
+}

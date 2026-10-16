@@ -1,0 +1,116 @@
+[tools]
+node = "24.22.0"
+postgres = "18.6"
+
+[tasks.setup]
+description = "Install locked workspace dependencies and the pre-push hook"
+run = "scripts/setup"
+
+[tasks.live-check]
+description = "Read-only real DEV checks using an explicitly supplied environment file"
+depends = ["build"]
+run = "scripts/isolated scripts/live-check"
+
+[tasks.discovery-live-check]
+description = "Read-only inventory and masked variable probes against the explicitly approved DEV environment"
+depends = ["build"]
+run = "scripts/isolated scripts/discovery-live-check.mjs"
+
+[tasks.dependencies-live-check]
+description = "Read-only connection reference and dependency graph probes in the explicitly approved DEV environment"
+depends = ["build"]
+run = "scripts/isolated scripts/dependencies-live-check.mjs"
+
+[tasks.community-live-check]
+description = "Provision and remove owned DEV fixtures for extended schema, atomic rollback, and deterministic seed validation"
+depends = ["build"]
+run = "scripts/isolated scripts/community-live-check.mjs"
+
+[tasks.schema-live-check]
+description = "Create and clean only owned synthetic schema fixtures in the real DEV environment"
+depends = ["build"]
+run = "scripts/isolated scripts/schema-live-check.mjs"
+
+[tasks.transfer-live-check]
+description = "Transfer only owned synthetic DEV fixtures to a disposable PostgreSQL instance and clean both"
+depends = ["build"]
+run = "scripts/isolated scripts/transfer-live-check.mjs"
+
+[tasks.build-core]
+description = "Build the core workspace"
+depends = ["build-viewer"]
+run = "scripts/build-package core"
+
+[tasks.build-viewer]
+description = "Bundle the offline graph canvas and its vendor license"
+run = "scripts/build-viewer.mjs"
+sources = ["packages/core/src/dependency-viewer.ts", "scripts/build-viewer.mjs", "package-lock.json"]
+outputs = ["packages/core/dist/viewer-script.js"]
+
+[tasks.build-dataverse]
+description = "Build the Dataverse workspace"
+depends = ["build-core"]
+run = "scripts/build-package dataverse"
+
+[tasks.build-cli]
+description = "Build the CLI workspace"
+depends = ["build-dataverse", "build-postgres"]
+run = "scripts/build-package cli"
+
+[tasks.build-postgres]
+description = "Build the PostgreSQL adapter"
+depends = ["build-core"]
+run = "scripts/build-package postgres"
+
+[tasks.build]
+description = "Build all packages"
+depends = ["build-core", "build-dataverse", "build-cli"]
+
+[tasks.typecheck]
+description = "Check strict TypeScript contracts"
+depends = ["build"]
+run = "scripts/isolated scripts/typecheck"
+
+[tasks.lint]
+description = "Check source and formatting conventions"
+run = "scripts/isolated scripts/lint"
+
+[tasks.test]
+description = "Run isolated offline behaviour and CLI tests"
+depends = ["build"]
+run = "scripts/isolated scripts/test"
+
+[tasks.test-mutation]
+description = "Prove named behaviours with selected mutations"
+depends = ["build"]
+run = "scripts/isolated scripts/test-mutation"
+
+[tasks.docs-cli]
+description = "Generate the CLI reference from command definitions"
+depends = ["build-cli"]
+run = "scripts/docs-cli"
+
+[tasks.docs-check]
+description = "Verify documentation freshness and local links"
+depends = ["build-cli"]
+run = "scripts/isolated scripts/docs-check"
+
+[tasks.package-check]
+description = "Check package contents and public entry points"
+depends = ["build"]
+run = "scripts/isolated scripts/package-check"
+
+[tasks.screens]
+description = "Render installed CLI output from isolated synthetic fixtures"
+depends = ["build"]
+run = "scripts/isolated scripts/screens.mjs"
+usage = 'flag "--only <name>" help="Render comma-separated named scenes instead of all scenes"'
+
+[tasks.release]
+description = "Prepare local candidate tarballs without publishing"
+depends = ["package-check"]
+run = "scripts/isolated scripts/release.mjs"
+
+[tasks.check]
+description = "Run full offline verification"
+depends = ["typecheck", "lint", "test", "test-mutation", "docs-check", "package-check"]

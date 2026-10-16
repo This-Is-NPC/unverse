@@ -1,0 +1,25 @@
+{
+  "name": "@unverse/cli",
+  "version": "0.5.0-rc.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist/*.js",
+    "dist/*.js.map",
+    "dist/*.d.ts",
+    "dist/LICENSE"
+  ],
+  "bin": {
+    "unverse": "./dist/main.js"
+  },
+  "dependencies": {
+    "@azure/identity": "4.14.0",
+    "@unverse/core": "0.5.0-rc.1",
+    "@unverse/dataverse": "0.5.0-rc.1",
+    "@unverse/postgres": "0.5.0-rc.1"
+  },
+  "engines": {
+    "node": ">=24.22.0 <25"
+  }
+}

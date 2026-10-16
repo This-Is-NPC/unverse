@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+npm ci --ignore-scripts --cache .cache/npm
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright" ./node_modules/.bin/playwright install chromium
+git config core.hooksPath scripts/hooks

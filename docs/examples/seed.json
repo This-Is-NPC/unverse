@@ -1,0 +1,51 @@
+{
+  "seedVersion": 1,
+  "seed": "community-example-v1",
+  "mapping": { "prefix": "uv", "solution": "CommunityExample" },
+  "model": {
+    "modelVersion": 1,
+    "entities": [
+      {
+        "name": "example",
+        "primaryKey": "id",
+        "primaryName": "name",
+        "columns": [
+          { "name": "id", "type": "uuid", "nullable": false },
+          {
+            "name": "name",
+            "type": "text",
+            "nullable": false,
+            "maxLength": 100
+          },
+          {
+            "name": "notes",
+            "type": "multiline",
+            "nullable": true,
+            "maxLength": 8000
+          },
+          {
+            "name": "status",
+            "type": "choice",
+            "nullable": false,
+            "options": [
+              { "value": 1, "label": "Open" },
+              { "value": 2, "label": "Closed" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "rows": {
+    "example": [
+      {
+        "key": "first",
+        "values": {
+          "name": "Synthetic example",
+          "notes": "First line\nSecond line",
+          "status": 1
+        }
+      }
+    ]
+  }
+}

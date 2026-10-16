@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+test_list="$TMPDIR/tests"
+find packages -path '*/test/*.test.mjs' -type f -print >"$test_list"
+
+set --
+while IFS= read -r test_file; do
+  set -- "$@" "$test_file"
+done <"$test_list"
+
+if [ "$#" -gt 0 ]; then
+  node --test "$@"
+fi

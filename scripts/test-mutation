@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const root = process.cwd();
+const mutations = [
+  ["environment-url", "core/config.js", "return url.origin;", 'return "https://wrong.invalid";', "core", "normalizes the selected environment URL"],
+  ["redaction", "core/result.js", 'replaceAll(secret, "[REDACTED]")', "replaceAll(secret, secret)", "cli", "redacts secrets from JSON errors"],
+  ["preflight", "core/config.js", "config.configVersion !== 1", "false", "cli", "invalid profiles prevent token acquisition"],
+  ["token-resource", "dataverse/client.js", "`${this.environmentUrl}/.default`", '"https://wrong.invalid/.default"', "dataverse", "requests a token for the selected environment"],
+  ["auth-guard", "dataverse/client.js", 'throw new DataverseError("authentication", message(error, "Token acquisition failed."));', 'return "invalid-token";', "dataverse", "prevents API calls after authentication fails"],
+  ["payload-error", "dataverse/client.js", "object(response.body).error !== undefined", "false", "dataverse", "recognizes a permission error payload even with a successful HTTP status"],
+  ["retry-budget", "dataverse/client.js", "attempt < 3", "attempt < 2", "dataverse", "retries transport failures without losing their context or leaking a token"],
+  ["retry-date", "dataverse/client.js", "Math.max(0, date - now)", "0", "dataverse", "honors an HTTP date Retry-After without a real wait"],
+  ["permission-exit", "core/result.js", 'case "permission":\n            return 4;', 'case "permission":\n            return 0;', "cli", "preserves permission failures from whoami"],
+];
+
+mutations.push(
+  ["team-roles", "dataverse/roles.js", "for (const role of assigned.rows)", "for (const role of [])", "dataverse", "includes team-assigned roles", "roles"],
+  ["role-sources", "dataverse/roles.js", "[...(previous?.sources ?? [])]", "[]", "dataverse", "retains direct and team evidence after deduplication", "roles"],
+  ["duplicate-role", "dataverse/roles.js", "matches.rows.length !== 1", "matches.rows.length === 0", "dataverse", "requires disambiguation of duplicate role names", "roles"],
+  ["missing-expectation", "cli/run.js", 'assigned === false ? "failed" : "ok"', '"ok"', "cli", "failed role expectation differs from an informational empty list"],
+  ["denied-roles", "dataverse/client.js", "const failure = serviceError(response);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response);', "cli", "denied team reads cannot make a missing-role check fail"],
+  ["all-pages", "dataverse/client.js", "continuation === undefined ? undefined : this.requestUrl(continuation)", "undefined", "dataverse", "collects all requested pages", "collection"],
+  ["continuation-origin", "dataverse/client.js", "url.origin !== this.environmentUrl", "false", "dataverse", "rejects cross-origin continuation before sending a token", "collection"],
+  ["query-cap", "dataverse/client.js", "rows.length === limit", "false", "dataverse", "reports capped results as incomplete", "collection"],
+  ["later-page", "dataverse/client.js", "const failure = serviceError(response);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response);', "dataverse", "does not return a complete result after a later page fails", "collection"],
+  ["literal-escaping", "dataverse/odata.js", 'value.replaceAll("\'", "\'\'")', "value", "dataverse", "escapes user filters before encoding query parameters", "roles"],
+  ["metadata-search", "dataverse/query.js", "matches(search, table.logicalName, table.displayName, table.entitySet)", "true", "dataverse", "searches metadata locally without unsupported contains", "query"],
+  ["inherited-profile", "core/config.js", "Object.hasOwn(config.environments, name)", "true", "core", "rejects inherited environment names"],
+  ["page-size", "dataverse/client.js", "`odata.maxpagesize=${this.pageSize}`", '"odata.maxpagesize=5000"', "dataverse", "requests the configured OData page size"],
+  ["schema-confirm", "dataverse/schema.js", "if (!confirm)", "if (false)", "dataverse", "schema apply requires confirmation before any write", "schema"],
+  ["schema-environment", "dataverse/schema.js", "canonical(value.environment) !== canonical(environment)", "false", "dataverse", "schema plans reject a foreign environment before writes", "schema"],
+  ["schema-stale", "dataverse/schema.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "schema plans reject stale fingerprints before writes", "schema"],
+  ["schema-destructive", "dataverse/schema.js", "expected.blocked.length !== 0", "false", "dataverse", "destructive schema changes cannot reach the write transport", "schema"],
+  ["schema-idempotence", "core/plan.js", "existing === undefined", "true", "dataverse", "applying an already satisfied schema creates no duplicate structure", "schema"],
+  ["schema-type", "core/schema.js", "if (![", "if (false && ![", "dataverse", "unsupported types and model properties cannot disappear", "schema"],
+  ["schema-mapping", "core/schema.js", "column.name === entity.primaryKey", "false", "dataverse", "applying an already satisfied schema creates no duplicate structure", "schema"],
+  ["schema-client-url", "dataverse/schema.js", "client.url !== environment.url", "false", "dataverse", "schema apply rejects a client endpoint inconsistent with the reviewed context", "schema"],
+  ["schema-client-organization", "dataverse/schema.js", "identity.organizationId !== environment.organizationId", "false", "dataverse", "schema apply checks the authenticated organization before writes", "schema"],
+  ["transfer-identity", "core/transfer.js", "mapped !== id", "false", "core", "detects a corrupted identity mapping", "transfer"],
+  ["transfer-relation", "core/transfer.js", "for (const column of entity.columns) {", "for (const column of entity.columns) { if (column.references !== undefined) continue;", "core", "detects a dropped relationship", "transfer"],
+  ["transfer-decimal", "core/transfer.js", "for (const column of entity.columns) {", 'for (const column of entity.columns) { if (column.type === "decimal") continue;', "core", "detects changed decimal precision", "transfer"],
+  ["transfer-time", "core/transfer.js", "for (const column of entity.columns) {", 'for (const column of entity.columns) { if (column.type === "instant") continue;', "core", "detects changed temporal semantics", "transfer"],
+  ["transfer-fingerprint", "core/transfer.js", "canonical(expected) !== canonical(input)", "false", "core", "rejects a modified manifest before import", "transfer"],
+  ["postgres-rollback", "postgres/index.js", 'this.client.query("ROLLBACK")', 'this.client.query("SELECT 1")', "postgres", "PostgreSQL rolls back partial imports before a safe retry", "postgres"],
+  ["postgres-decimal", "postgres/index.js", 'column.type === "decimal" &&', 'false &&', "postgres", "PostgreSQL detects changed decimal schema precision", "postgres"],
+  ["postgres-cycle", "postgres/index.js", "DEFERRABLE INITIALLY DEFERRED", "NOT DEFERRABLE", "postgres", "PostgreSQL defers cyclic relationship checks until all rows exist", "postgres"],
+  ["calendar-date", "core/values.js", "input.slice(0, 10)", '"2026-10-17"', "core", "rejects invalid calendar dates and sub-second instants", "transfer"],
+  ["temporal-precision", "core/values.js", 'fractional.replaceAll("0", "") !== ""', "false", "core", "rejects invalid calendar dates and sub-second instants", "transfer"],
+  ["decimal-loss", "core/values.js", 'fraction.slice(scale).replaceAll("0", "") !== ""', "false", "core", "rejects missing columns, broken references, and lossy decimals", "transfer"],
+  ["identity-ledger-count", "core/transfer.js", "Object.keys(identities[entity.name] ?? {}).length !== expected.length", "false", "core", "detects extra identity ledger entries and extra rows", "transfer"],
+  ["postgres-primary-key", "postgres/index.js", "keys.rows.length !== 1 ||\n                keys.rows[0]?.column_name !== entity.primaryKey", "false", "postgres", "PostgreSQL detects a removed primary key", "postgres"],
+  ["raw-manifest", "cli/run.js", "input.outputVersion === outputVersion ? input.data : input", "input.data ?? input", "cli", "CLI transfer verification uses PostgreSQL without requesting a Dataverse token"],
+  ["table-label", "dataverse/query.js", "table.displayName, table.entitySet", "null, table.entitySet", "dataverse", "table search resolves display labels and entity sets", "query"],
+  ["flow-category", "dataverse/discovery.js", "category eq 5", "category eq 0", "dataverse", "flow discovery restricts reads to cloud flows", "discovery"],
+  ["variable-mask", "dataverse/discovery.js", 'value: "[MASKED]"', "value: _value", "dataverse", "variable inventory masks values and never reads secret overrides", "discovery"],
+  ["variable-secret", "dataverse/discovery.js", "type === 100000005", "false", "dataverse", "variable inventory masks values and never reads secret overrides", "discovery"],
+  ["variable-compare", "dataverse/discovery.js", "row.value !== other.value", "false", "dataverse", "comparison detects private value differences without exposing values or hashes", "discovery"],
+  ["variable-unknown", "dataverse/discovery.js", "unknown.push(row.schemaName)", "void row.schemaName", "dataverse", "secret comparisons remain unknown instead of equal", "discovery"],
+  ["seed-namespace", "core/seed.js", "[spec.seed, entity.name, row.key]", '["constant", entity.name, row.key]', "core", "seed IDs are deterministic and relationships resolve to generated IDs", "seed"],
+  ["seed-duplicates", "core/seed.js", "ids.has(key)", "false", "core", "seed rejects duplicate row keys and missing references", "seed"],
+  ["data-confirm", "dataverse/data-plan.js", "if (!confirm)", "if (false)", "dataverse", "Dataverse data apply rejects missing confirmation before writes", "data-plan"],
+  ["data-environment", "dataverse/data-plan.js", "canonical(value.environment) !== canonical(environment)", "false", "dataverse", "Dataverse data plans bind the target environment", "data-plan"],
+  ["data-stale", "dataverse/data-plan.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "Dataverse data plans reject stale target state", "data-plan"],
+  ["data-conflicts", "dataverse/data-plan.js", "if (expected.blocked.length)", "if (false)", "dataverse", "Dataverse data plans never overwrite conflicting existing rows", "data-plan"],
+  ["batch-status", "dataverse/client.js", "statuses.some((status) => status < 200 || status >= 300)", "false", "dataverse", "atomic data batch failures cannot produce a verified result", "data-plan"],
+  ["csv-formula", "cli/csv.js", "text = `'${text}`", "text = text", "cli", "CSV quotes nested records and prevents spreadsheet formulas", "csv"],
+  ["choice-values", "core/values.js", "column.options?.some((option) => option.value === input)", "true", "core", "new schema types reject undeclared choices and external dataset integrity", "seed"],
+  ["policy-replacement", "core/seed.js", 'rule?.action === "constant" ? rule.value : row[column.name]', 'row[column.name]', "core", "transfer policy requires every field and replaces sensitive values", "seed"],
+  ["external-target", "core/plan.js", "column.externalReference !== undefined &&", "false &&", "dataverse", "external relationships require a verified target primary key", "schema"],
+  ["choice-constraint", "postgres/index.js", 'const wrongChoice = column.type === "choice" &&', 'const wrongChoice = false &&', "postgres", "PostgreSQL preserves multiline text and enforces choice definitions", "postgres"],
+  ["data-operation-bound", "dataverse/data-plan.js", "operations > 1000", "false", "dataverse", "data planning rejects datasets beyond the atomic operation bound", "data-plan"],
+  ["component-identity", "dataverse/discovery.js", "`${row.componentType}:${row.objectId}`", "`${row.componentType}:${row.id}`", "dataverse", "component comparison uses typed object identities instead of environment-local membership IDs", "discovery"],
+  ["graph-typed-id", "dataverse/dependencies.js", "`component:${componentType(type)}:${guid(objectId)}`", "`component:0:${guid(objectId)}`", "dataverse", "typed component identity prevents same-GUID nodes from merging", "dependencies"],
+  ["graph-direction", "dataverse/dependencies.js", 'from,\n                                to,\n                                kind: "requires"', 'from: to,\n                                to: from,\n                                kind: "requires"', "dataverse", "dependency graph keeps consumer-to-requirement direction and transitive impact paths", "dependencies"],
+  ["graph-impact", "core/dependencies.js", "incoming.get(edge.to)?.push(edge.from)", "incoming.get(edge.from)?.push(edge.to)", "dataverse", "dependency graph keeps consumer-to-requirement direction and transitive impact paths", "dependencies"],
+  ["graph-cycles", "core/dependencies.js", "cycles.push(group.sort())", "void group", "dataverse", "dependency graph keeps consumer-to-requirement direction and transitive impact paths", "dependencies"],
+  ["graph-coverage", "dataverse/dependencies.js", "const complete = issues.length === 0", "const complete = true", "dataverse", "denied dependency reads remain incomplete instead of proving no consumers", "dependencies"],
+  ["graph-frontier", "dataverse/dependencies.js", "else\n            frontier.add(node.id);", "else\n            void node.id;", "dataverse", "depth frontier and query budget cannot claim complete dependency closure", "dependencies"],
+  ["graph-queries", "dataverse/dependencies.js", "queries >= maxQueries", "false", "dataverse", "depth frontier and query budget cannot claim complete dependency closure", "dependencies"],
+  ["graph-nodes", "dataverse/dependencies.js", "nodes.size === maxNodes", "false", "dataverse", "node and edge bounds keep graph endpoints valid and coverage incomplete", "dependencies"],
+  ["graph-edges", "dataverse/dependencies.js", "edges.size === maxEdges", "false", "dataverse", "node and edge bounds keep graph endpoints valid and coverage incomplete", "dependencies"],
+  ["graph-membership", "core/dependencies.js", 'edge.kind === "contains"', "false", "dataverse", "solution membership is not a fabricated platform dependency", "dependencies"],
+  ["graph-unrelated", "dataverse/dependencies.js", 'issue(node.id, operation, "unrelated-dependency");\n                            continue;', "void node.id;", "dataverse", "unrelated dependency payloads cannot contaminate the observed graph", "dependencies"],
+  ["graph-dedup", "dataverse/dependencies.js", "const key = JSON.stringify(edge)", "const key = String(edges.size)", "dataverse", "duplicate dependency evidence is deduplicated and cycles terminate", "dependencies"],
+  ["graph-reference-type", "dataverse/dependencies.js", "referenceType = componentType(metadata.rows[0]?.ObjectTypeCode)", "referenceType = 10000", "dataverse", "dependency functions receive object IDs and the environment-resolved reference type", "dependencies"],
+  ["graph-html-escape", "core/dependency-viewer-html.js", '.replaceAll("<", "\\\\u003c")', '.replaceAll("<", "<")', "dataverse", "graph visual exports escape hostile metadata and retain incomplete warnings", "dependencies"],
+  ["graph-svg-coverage", "core/dependencies.js", 'graph.closureComplete ? "complete" : "incomplete"', '"complete"', "dataverse", "graph visual exports escape hostile metadata and retain incomplete warnings", "dependencies"],
+  ["graph-svg-source-limit", "core/dependencies.js", "limit: Infinity", "limit: undefined", "dataverse", "SVG export renders graphs beyond Pele default limits", "dependencies"],
+  ["graph-svg-output-limit", "core/dependencies.js", "outputLimit: Infinity", "outputLimit: undefined", "dataverse", "SVG export renders graphs beyond Pele default limits", "dependencies"],
+  ["graph-svg-edge-limit", "core/dependencies.js", "maxEdges: Infinity", "maxEdges: undefined", "dataverse", "SVG export renders graphs beyond Pele default limits", "dependencies"],
+  ["graph-mermaid-escape", "core/dependencies.js", ': `#${character.codePointAt(0)};`', ': character', "dataverse", "graph visual exports escape hostile metadata and retain incomplete warnings", "dependencies"],
+  ["graph-root-existence", "dataverse/dependencies.js", 'issue(root, "root", "unverified-object")', "void root", "dataverse", "unknown root objects are not reported as verified empty dependency sets", "dependencies"],
+  ["graph-authentication", "dataverse/dependencies.js", 'error instanceof DataverseError && error.code === "authentication"', "false", "dataverse", "authentication failures stop dependency collection rather than yielding a partial success", "dependencies"],
+  ["graph-connection-identity", "dataverse/dependencies.js", 'kind === "connection"', "false", "dataverse", "opaque connection identity is qualified by its connector binding", "dependencies"],
+  ["graph-secret-fields", "dataverse/connections.js", "statecode,ismanaged", "statecode,ismanaged,connectionparametersconfig", "dataverse", "connection metadata excludes credentials and separates bindings from dependencies", "dependencies"],
+  ["graph-label-identity", "dataverse/dependencies.js", "guid(text(row, key)) !== node.objectId", "false", "dataverse", "unrelated label metadata cannot invent a connection binding", "dependencies"],
+);
+
+for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
+  const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
+  try {
+    cpSync(resolve(root, "packages"), resolve(temporary, "packages"), { recursive: true });
+    cpSync(resolve(root, "scripts/lib"), resolve(temporary, "scripts/lib"), { recursive: true });
+    mkdirSync(resolve(temporary, "node_modules/@unverse"), { recursive: true });
+    for (const entry of readdirSync(resolve(root, "node_modules"))) {
+      if (entry !== "@unverse") symlinkSync(resolve(root, "node_modules", entry), resolve(temporary, "node_modules", entry));
+    }
+    for (const entry of readdirSync(resolve(temporary, "packages"))) symlinkSync(resolve(temporary, "packages", entry), resolve(temporary, "node_modules/@unverse", entry));
+    const target = resolve(temporary, "packages", file.replace("/", "/dist/"));
+    const source = readFileSync(target, "utf8");
+    assert.ok(source.includes(before), `Mutation ${name} has no target.`);
+    writeFileSync(target, source.replace(before, after));
+    const isolated = {};
+    for (const variable of ["HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "TMPDIR"]) {
+      isolated[variable] = resolve(temporary, variable);
+      mkdirSync(isolated[variable]);
+    }
+    const testFile = namedFile ?? (workspace === "core" ? "config" : workspace === "cli" ? "run" : "client");
+    const result = spawnSync(process.execPath, ["--test", `--test-name-pattern=^${testName}$`, `packages/${workspace}/test/${testFile}.test.mjs`], { cwd: temporary, encoding: "utf8", env: { ...process.env, ...isolated }, timeout: 30_000 });
+    const transcript = result.stdout + result.stderr;
+    assert.equal(result.status, 1, `Mutation ${name} survived or crashed:\n${transcript}`);
+    assert.match(transcript, /AssertionError|ERR_ASSERTION/, `Mutation ${name} did not fail a behaviour assertion:\n${transcript}`);
+    assert.ok(transcript.includes(testName), `Mutation ${name} did not run its named test.`);
+    console.log(`Proven: ${name} -> ${testName}`);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
