@@ -228,6 +228,10 @@ function runtime(readConfig, output = [], errors = [], secrets = [], whoAmI) {
       throw new Error("unexpected write");
     },
     fileExists: async () => true,
+    listDirectory: async () => [],
+    loadModule: async () => {
+      throw new Error("unexpected module load");
+    },
     cwd: "/work/project",
     env: {},
     now: () => "2026-10-16T00:00:00.000Z",
@@ -456,14 +460,16 @@ async function planAndApplyData() {
   assert.equal(
     await runCli(
       [
-        "seed",
+        "pipeline",
         "plan",
+        "seed",
         "--env",
         "dev",
-        "--seed-file",
-        "seed.json",
         "--format",
         "json",
+        "--",
+        "--seed",
+        "seed.json",
       ],
       base,
     ),
@@ -686,7 +692,7 @@ test("verify reports an unsatisfied plan with exit 1 and a satisfied one with ex
 });
 
 test("the per-kind apply commands are unknown", async () => {
-  for (const group of ["schema", "seed", "transfer"])
+  for (const group of ["schema", "pipeline"])
     await rejected(
       [group, "apply", "--env", "dev", "--plan-file", "p.json", "--confirm"],
       new RegExp(`Unknown command ${group} apply\\.`),

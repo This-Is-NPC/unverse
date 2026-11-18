@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createManifest } from "@unverse/core";
+import { createManifest, seedDesired, transferDesired } from "@unverse/core";
 import data from "../../core/test/fixtures/data.json" with { type: "json" };
 import { seedSpec } from "../../core/test/fixtures/seed.mjs";
-import {
-  applyDataPlan,
-  planDataverseTransfer,
-  planSeed,
-} from "../dist/index.js";
+import { applyDataPlan, planDesired } from "../dist/index.js";
 import { dataFixture } from "./fixtures/data.mjs";
 
 async function prepare() {
@@ -34,11 +30,9 @@ async function prepare() {
     ),
   );
   const policy = { policyVersion: 1, fields };
-  const plan = await planDataverseTransfer(
+  const plan = await planDesired(
     fixture.client,
-    manifest,
-    policy,
-    fixture.mapping,
+    await transferDesired(manifest, policy, fixture.mapping),
     fixture.environment,
   );
   return { ...fixture, manifest, policy, plan };
@@ -133,11 +127,9 @@ test("atomic data batch failures cannot produce a verified result", async () => 
 test("Dataverse transfer refuses copying back into the source organization", async () => {
   const fixture = await prepare();
   await assert.rejects(
-    planDataverseTransfer(
+    planDesired(
       fixture.client,
-      fixture.manifest,
-      fixture.policy,
-      fixture.mapping,
+      await transferDesired(fixture.manifest, fixture.policy, fixture.mapping),
       { ...fixture.environment, organizationId: "source-org" },
     ),
     /distinct/,
@@ -146,9 +138,9 @@ test("Dataverse transfer refuses copying back into the source organization", asy
 
 test("seed plans generate create-only rows in the authenticated target", async () => {
   const fixture = await dataFixture();
-  const plan = await planSeed(
+  const plan = await planDesired(
     fixture.client,
-    seedSpec(fixture.model, fixture.mapping, data),
+    await seedDesired(seedSpec(fixture.model, fixture.mapping, data)),
     fixture.environment,
   );
   assert.equal(plan.create.length, 2);
@@ -183,9 +175,9 @@ test("atomic seed changesets preserve cyclic relationships", async () => {
   const fixture = await dataFixture(model);
   const cyclicData = structuredClone(data);
   cyclicData.parent[0].childid = data.child[0].id;
-  const plan = await planSeed(
+  const plan = await planDesired(
     fixture.client,
-    seedSpec(fixture.model, fixture.mapping, cyclicData),
+    await seedDesired(seedSpec(fixture.model, fixture.mapping, cyclicData)),
     fixture.environment,
   );
   assert.equal(
@@ -202,11 +194,9 @@ test("transfer plans contain policy-transformed values instead of original field
     action: "constant",
     value: "Anonymous",
   };
-  const plan = await planDataverseTransfer(
+  const plan = await planDesired(
     fixture.client,
-    fixture.manifest,
-    fixture.policy,
-    fixture.mapping,
+    await transferDesired(fixture.manifest, fixture.policy, fixture.mapping),
     fixture.environment,
   );
   assert.equal(plan.manifest.data.parent[0].name, "Anonymous");
@@ -234,11 +224,9 @@ test("data planning rejects datasets beyond the atomic operation bound", async (
     fixture.mapping,
   );
   await assert.rejects(
-    planDataverseTransfer(
+    planDesired(
       fixture.client,
-      manifest,
-      fixture.policy,
-      fixture.mapping,
+      await transferDesired(manifest, fixture.policy, fixture.mapping),
       fixture.environment,
     ),
     /1000-operation/,

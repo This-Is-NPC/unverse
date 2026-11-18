@@ -15,7 +15,6 @@ import {
   type PostgresProfile,
   parseConfig,
   parseManifest,
-  parseMapping,
   parseModel,
   planSchema,
   type Result,
@@ -42,8 +41,7 @@ import {
   OrganizationMismatchError,
   type PlatformClient,
   planAccess,
-  planDataverseTransfer,
-  planSeed,
+  planDesired,
   platformApps,
   platformFlows,
   query,
@@ -61,11 +59,21 @@ import type { PostgresStore } from "@unverse/postgres";
 import { InputError, parseInvocation, requestsJson } from "./arguments.js";
 import type { Format } from "./commands.js";
 import { renderCsv } from "./csv.js";
-import { specDocument } from "./help.js";
+import { readDocument, readMapping } from "./documents.js";
+import { renderCommandHelp, specDocument, usage } from "./help.js";
+import {
+  createContext,
+  pipelineEntries,
+  pipelineRoute,
+  preparePipeline,
+  resolvePipeline,
+  runPipeline,
+} from "./pipeline.js";
 import {
   configFile,
   configTemplate,
   type ProjectRuntime,
+  projectRoot,
   resolveConfigPath,
   resolveEnvironmentName,
 } from "./project.js";
@@ -77,6 +85,8 @@ export interface CliRuntime extends ProjectRuntime {
   readonly writeOut: (line: string) => void;
   readonly writeError: (line: string) => void;
   readonly secrets: readonly string[];
+  readonly listDirectory: (path: string) => Promise<readonly string[]>;
+  readonly loadModule: (path: string) => Promise<unknown>;
   readonly connect?: (
     profile: EnvironmentProfile,
     name: string,
@@ -88,22 +98,9 @@ export interface CliRuntime extends ProjectRuntime {
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
 }
 
-function unwrap(input: Record<string, unknown>): unknown {
-  return input.outputVersion === outputVersion ? input.data : input;
-}
-
 async function readPlan(runtime: CliRuntime, path: string) {
-  const document = unwrap(record(JSON.parse(await runtime.readFile(path))));
+  const document = await readDocument(runtime.readFile, path);
   return { document, ...readPlanHeader(document) };
-}
-
-async function readMapping(
-  runtime: CliRuntime,
-  flags: ReadonlyMap<string, string>,
-) {
-  return parseMapping(
-    JSON.parse(await runtime.readFile(flags.get("--mapping-file") ?? "")),
-  );
 }
 
 export async function runCli(
@@ -202,6 +199,59 @@ export async function runCli(
         format,
         runtime,
       );
+    const root = projectRoot(configPath.value);
+    if (command === "pipeline list" || command === "pipeline show") {
+      const entries =
+        command === "pipeline list"
+          ? await pipelineEntries(runtime, root)
+          : [
+              await resolvePipeline(
+                runtime,
+                root,
+                positionals.get("pipeline") ?? "",
+              ),
+            ];
+      const described = await Promise.all(
+        entries.map(async (entry) => {
+          const pipeline = await entry.load();
+          return {
+            name: entry.name,
+            origin: entry.origin,
+            ...(entry.path === undefined ? {} : { path: entry.path }),
+            description: pipeline.description,
+            ...(command === "pipeline show"
+              ? {
+                  params: pipeline.params ?? [],
+                  usage: usage(pipelineRoute(entry, pipeline)),
+                }
+              : {}),
+          };
+        }),
+      );
+      return emit(
+        {
+          outputVersion,
+          command,
+          timestamp: runtime.now(),
+          status: "ok",
+          data:
+            command === "pipeline list"
+              ? { pipelines: described }
+              : described[0],
+          evidence: [
+            `Pipelines were read from the built-in set and ${join(root, ".unverse", "pipelines")}.`,
+          ],
+          coverage: {
+            complete: true,
+            limitations: [
+              "No environment was contacted. Loading a project pipeline runs its top-level code with your permissions.",
+            ],
+          },
+        },
+        format,
+        runtime,
+      );
+    }
     const environmentName = selected?.value ?? "";
     const profile = selectEnvironment(config, environmentName);
     environment = { name: environmentName, url: profile.url };
@@ -232,10 +282,12 @@ export async function runCli(
       );
     }
     if (command === "pg import" || command === "pg verify") {
-      const input = record(
-        JSON.parse(await runtime.readFile(flags.get("--manifest-file") ?? "")),
+      const manifest = await parseManifest(
+        await readDocument(
+          runtime.readFile,
+          flags.get("--manifest-file") ?? "",
+        ),
       );
-      const manifest = await parseManifest(unwrap(input));
       if (
         manifest.source.environment.url !== profile.url ||
         manifest.source.environment.name !== environmentName
@@ -333,6 +385,19 @@ export async function runCli(
         runtime,
       );
     }
+    const prepared =
+      command === "pipeline plan"
+        ? await preparePipeline(
+            runtime,
+            root,
+            positionals.get("pipeline") ?? "",
+            parsed.rest,
+          )
+        : undefined;
+    if (prepared?.params === undefined && prepared !== undefined) {
+      runtime.writeOut(renderCommandHelp(prepared.route));
+      return 0;
+    }
     stage = "token and WhoAmI";
     if (runtime.connect === undefined)
       throw new DataverseError(
@@ -344,7 +409,7 @@ export async function runCli(
       command === "schema inspect" ||
       command === "schema plan" ||
       command === "pg export"
-        ? await readMapping(runtime, flags)
+        ? await readMapping(runtime.readFile, flags.get("--mapping-file") ?? "")
         : undefined;
     const model =
       command === "schema plan" || command === "pg export"
@@ -517,39 +582,12 @@ export async function runCli(
         runtime,
       );
     }
-    if (["seed plan", "transfer plan", "access plan"].includes(command)) {
-      const context = {
-        ...environment,
-        organizationId: identity.organizationId,
-      };
-      let data: unknown;
-      if (command === "access plan")
-        data = await planAccess(
-          client,
-          JSON.parse(await runtime.readFile(flags.get("--access-file") ?? "")),
-          context,
-        );
-      else if (command === "seed plan")
-        data = await planSeed(
-          client,
-          JSON.parse(await runtime.readFile(flags.get("--seed-file") ?? "")),
-          context,
-        );
-      else {
-        const input = record(
-          JSON.parse(
-            await runtime.readFile(flags.get("--manifest-file") ?? ""),
-          ),
-        );
-        data = await planDataverseTransfer(
-          client,
-          unwrap(input),
-          JSON.parse(await runtime.readFile(flags.get("--policy-file") ?? "")),
-          await readMapping(runtime, flags),
-          context,
-        );
-      }
-      const report = record(data);
+    if (command === "access plan") {
+      const data = await planAccess(
+        client,
+        JSON.parse(await runtime.readFile(flags.get("--access-file") ?? "")),
+        { ...environment, organizationId: identity.organizationId },
+      );
       return emit(
         {
           ...base,
@@ -557,11 +595,47 @@ export async function runCli(
           status: "ok",
           data,
           evidence: [
-            "The target schema, data and access state were read to plan the reviewed operations.",
+            "The target teams, roles and assignments were read to plan the reviewed operations.",
           ],
           coverage: {
             complete: true,
-            limitations: (report.limitations ?? []) as readonly string[],
+            limitations: data.limitations,
+          },
+        },
+        format,
+        runtime,
+      );
+    }
+    if (prepared?.params !== undefined) {
+      const context = createContext(runtime, {
+        configuration: config,
+        root,
+        target: environmentName,
+        targetClient: client,
+        params: prepared.params,
+      });
+      const desired = await runPipeline(
+        prepared.entry.name,
+        prepared.pipeline,
+        context,
+      );
+      const data = await planDesired(client, desired, {
+        ...environment,
+        organizationId: identity.organizationId,
+      });
+      return emit(
+        {
+          ...base,
+          caller: { id: identity.applicationUserId, kind: "application-user" },
+          status: "ok",
+          data,
+          evidence: [
+            `Pipeline ${prepared.entry.name} (${prepared.entry.path ?? "built-in"}) returned the desired data through a read-only context.`,
+            "The target schema and data state were read to plan create-only operations.",
+          ],
+          coverage: {
+            complete: true,
+            limitations: data.limitations,
           },
         },
         format,

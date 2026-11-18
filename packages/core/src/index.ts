@@ -36,6 +36,13 @@ export {
   dependencySvg,
 } from "./dependencies.js";
 export {
+  type DesiredData,
+  type ResolvedData,
+  resolveDesired,
+  seedDesired,
+  transferDesired,
+} from "./desired.js";
+export {
   type BlockedChange,
   type ObservedColumn,
   type ObservedEntity,
@@ -93,7 +100,7 @@ export {
   type SecurityRoleOperation,
   type SecurityRoles,
 } from "./security-roles.js";
-export { applyDataPolicy, buildSeed } from "./seed.js";
+export { applyDataPolicy, buildSeed, seedId } from "./seed.js";
 export {
   type ConnectionReference,
   connectionReferenceName,

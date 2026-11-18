@@ -131,15 +131,26 @@ export const scenes = [
   },
   {
     name: "19-seed-plan",
-    args: ["seed", "plan", "--env", "dev", "--seed-file", "seed.json"],
+    args: [
+      "pipeline",
+      "plan",
+      "seed",
+      "--env",
+      "dev",
+      "--",
+      "--seed",
+      "seed.json",
+    ],
   },
   {
     name: "20-transfer-plan",
     args: [
-      "transfer",
+      "pipeline",
       "plan",
+      "transfer",
       "--env",
       "dev",
+      "--",
       "--mapping-file",
       "transfer-mapping.json",
       "--manifest-file",
@@ -241,13 +252,20 @@ export const scenes = [
     name: "32-artifact-list",
     args: ["artifact", "list", "canvas-app", "--env", "dev"],
   },
+  { name: "33-pipelines", args: ["pipeline", "list"] },
 ];
 
 export async function stageScenes(root, consumer) {
-  mkdirSync(resolve(consumer.directory, ".unverse"));
+  mkdirSync(resolve(consumer.directory, ".unverse/pipelines"), {
+    recursive: true,
+  });
   cpSync(
     resolve(root, "packages/cli/test/fixtures/config.json"),
     resolve(consumer.directory, ".unverse/config.json"),
+  );
+  cpSync(
+    resolve(root, "docs/examples/families.mjs"),
+    resolve(consumer.directory, ".unverse/pipelines/families.mjs"),
   );
   cpSync(
     resolve(root, "packages/core/test/fixtures/schema.json"),

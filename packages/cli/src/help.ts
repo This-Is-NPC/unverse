@@ -48,6 +48,7 @@ export function usage(route: Route): string {
         flag.required === true ? flagText(flag) : `[${flagText(flag)}]`,
       ),
     ...groups.map((group) => groupText(group, flags)),
+    ...(route.command.passthrough === true ? ["[-- <pipeline flags>]"] : []),
   ].join(" ");
 }
 
@@ -59,6 +60,9 @@ export function groupMessage(group: OneOfGroup): string {
       : `${names.slice(0, -1).join(", ")}, or ${names.at(-1)}`
   }.`;
 }
+
+const passthroughMessage =
+  "Everything after -- is parsed against the pipeline's own flags; unverse pipeline show lists them.";
 
 function formatsText(command: CommandSpec): string {
   return command.outputs
@@ -128,7 +132,9 @@ export function renderCommandHelp(route: Route): string {
     route.command.summary,
     "",
     `Effect: ${route.command.effect}`,
-    `Formats: ${formatsText(route.command)}`,
+    ...(route.command.outputs.length === 0
+      ? []
+      : [`Formats: ${formatsText(route.command)}`]),
     ...((route.command.positionals ?? []).length === 0
       ? []
       : [
@@ -155,6 +161,7 @@ export function renderCommandHelp(route: Route): string {
       "",
       groupMessage(group),
     ]),
+    ...(route.command.passthrough === true ? ["", passthroughMessage] : []),
     ...(route.command.exits === undefined
       ? []
       : [
@@ -205,6 +212,9 @@ function renderCommandReference(route: Route): string {
       "### Exactly one of",
       ...bullets([`- ${groupMessage(group)}`]),
     ]),
+    ...(command.passthrough === true
+      ? ["### Pipeline flags", ...bullets([`- ${passthroughMessage}`])]
+      : []),
     ...(command.exits === undefined
       ? []
       : [
@@ -254,6 +264,7 @@ export function specDocument(): unknown {
       flags: commandFlags(command),
       positionals: command.positionals ?? [],
       groups: commandGroups(command),
+      passthrough: command.passthrough === true,
       outputs: { formats: command.outputs, default: command.outputs[0] },
       exits: command.exits ?? {},
     })),

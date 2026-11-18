@@ -6,6 +6,8 @@ import {
   buildSeed,
   normalizeDataset,
   parseModel,
+  resolveDesired,
+  seedId,
 } from "../dist/index.js";
 import data from "./fixtures/data.json" with { type: "json" };
 import model from "./fixtures/schema.json" with { type: "json" };
@@ -42,6 +44,44 @@ test("seed IDs are deterministic and relationships resolve to generated IDs", as
   assert.equal(first.data.child[0].parentid, first.data.parent[0].id);
   const other = await buildSeed({ ...seed, seed: "different" });
   assert.notEqual(first.data.parent[0].id, other.data.parent[0].id);
+});
+test("seedId derives the IDs a seed document receives", async () => {
+  const built = await buildSeed(seed);
+  assert.equal(
+    await seedId(seed.seed, "parent", "first"),
+    built.data.parent[0].id,
+  );
+  assert.notEqual(
+    await seedId(seed.seed, "parent", "first"),
+    await seedId(seed.seed, "child", "first"),
+  );
+});
+test("desired data is validated like a seed and a source makes it a transfer", async () => {
+  const built = await buildSeed(seed);
+  const desired = { model, mapping: seed.mapping, data: built.data };
+  const resolved = await resolveDesired(desired);
+  assert.equal(resolved.purpose, "seed");
+  assert.equal(resolved.manifest.data.parent[0].id, built.data.parent[0].id);
+  assert.equal(
+    (await resolveDesired({ ...desired, basis: "custom" })).basis,
+    "custom",
+  );
+  const source = {
+    environment: { name: "s", url: "https://s.invalid", organizationId: "o" },
+    mapping: seed.mapping,
+  };
+  assert.equal(
+    (await resolveDesired({ ...desired, source })).purpose,
+    "transfer",
+  );
+  await assert.rejects(
+    resolveDesired({ ...desired, write: true }),
+    /Desired data/,
+  );
+  await assert.rejects(
+    resolveDesired({ ...desired, data: { parent: [] } }),
+    /requires rows/,
+  );
 });
 test("seed rejects duplicate row keys and missing references", async () => {
   await assert.rejects(

@@ -161,13 +161,13 @@ The synthetic profiles match. Real differences report field names, never values.
 
 ## 21. Seed planning
 
-Deterministic fixture IDs and create-only operations are reviewed before apply.
+`unverse pipeline plan seed` runs the built-in seed pipeline. Deterministic fixture IDs and create-only operations are reviewed before apply.
 
 ![Seed plan](img/19-seed-plan.png)
 
 ## 22. Dataverse transfer planning
 
-The installed fixture's target is already satisfied, so no creates are needed.
+`unverse pipeline plan transfer` runs the built-in transfer pipeline. The installed fixture's target is already satisfied, so no creates are needed.
 
 ![Transfer plan](img/20-transfer-plan.png)
 
@@ -281,3 +281,12 @@ a reason. It does not contact Dataverse.
 fixture app is a code app; a field the source does not return is absent.
 
 ![Artifact list](img/32-artifact-list.png)
+
+## 36. Pipelines
+
+`unverse pipeline list` shows the built-in `seed` and `transfer` pipelines and
+the ones found in `.unverse/pipelines`, each with its description. It loads
+the files but does not contact Dataverse. The fixture project holds the
+[example pipeline](examples/families.mjs).
+
+![Pipeline list](img/33-pipelines.png)

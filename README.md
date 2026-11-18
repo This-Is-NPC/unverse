@@ -40,7 +40,8 @@ No package publication, npm scope ownership, or public download URL is implied.
    [list artifacts of one type](docs/how-to-list-artifacts.md), or
    [compare configuration](docs/how-to-compare-environments.md).
 5. [Seed synthetic development rows](docs/how-to-seed-data.md) after reviewing
-   an explicitly owned model and schema.
+   an explicitly owned model and schema, or
+   [write your own pipeline](docs/how-to-write-a-pipeline.md).
 6. [Visualize dependencies](docs/how-to-explore-dependencies.md) or
    [trace potential impact](docs/how-to-assess-dependency-impact.md) before
    changing a shared artifact.
@@ -70,6 +71,11 @@ existing application tables.
 authenticated caller's roles, and export [spreadsheet-safe CSV](docs/how-to-export-csv.md).
 [Dataverse-to-Dataverse data plans](docs/how-to-transfer-dataverse.md) require
 an explicit field-copy policy and never clear or overwrite target rows.
+
+**Your own pipelines.** Keep data pipelines in your repository under
+`.unverse/pipelines`; Unverse runs them with a read-only context and turns what
+they return into a reviewed plan. A pipeline runs with your permissions and is
+not sandboxed. See [write a pipeline](docs/how-to-write-a-pipeline.md).
 
 ## Interface
 
@@ -106,10 +112,10 @@ can allowlist the `read` commands.
 | `artifact types` / `artifact list <type>` | Show the built-in artifact catalog offline; list one type as normalized items |
 | `user list` | Find exact user identifiers for role investigation |
 | `variable list` | Inspect masked settings |
-| `seed plan` | Review deterministic development fixtures |
-| `transfer plan` | Review a create-only Dataverse transfer |
 | `access plan` | Review adding existing security roles to teams |
-| `apply <plan-file>` | Apply a confirmed, fresh, environment-bound schema, seed, transfer, or access plan |
+| `pipeline list` / `pipeline show <pipeline>` | List and describe the built-in `seed` and `transfer` pipelines and your own in `.unverse/pipelines` offline |
+| `pipeline plan <pipeline> -- <flags>` | Run a pipeline and review its create-only data plan |
+| `apply <plan-file>` | Apply a confirmed, fresh, environment-bound schema, data, or access plan |
 | `verify <plan-file>` | Check without writing whether a plan is satisfied |
 | `connector list` | Inspect visible solution-aware connector metadata |
 | `connref list` / `connref show <reference-id>` | Inspect bindings without claiming health |

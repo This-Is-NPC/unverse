@@ -35,10 +35,11 @@ identifiers and every permitted copied field have been reviewed and authorized.
 1. Plan against the explicitly selected destination:
 
    ```sh
-   unverse transfer plan --env test --mapping-file mapping.json --manifest-file manifest.json --policy-file policy.json --format json > transfer-plan.json
+   unverse pipeline plan transfer --env test --format json -- --mapping-file mapping.json --manifest-file manifest.json --policy-file policy.json > transfer-plan.json
    ```
 
-   Profile and file paths are placeholders. `mapping.json` holds
+   `transfer` is a built-in [pipeline](how-to-write-a-pipeline.md); its three
+   flags come after `--`. Profile and file paths are placeholders. `mapping.json` holds
    `{ "prefix": "uv", "solution": "CommunityExample" }`. The plan stores
    transformed rows, the source identity, a policy fingerprint, the target
    identity, and observed target state. It does not re-read the source.

@@ -1,8 +1,5 @@
 import {
-  applyDataPolicy,
-  buildSeed,
   canonical,
-  createManifest,
   type DataverseMapping,
   fingerprint,
   type PlanEffect,
@@ -12,6 +9,7 @@ import {
   physicalEntity,
   preservedIdentities,
   record,
+  resolveDesired,
   type SchemaEnvironment,
   type TransferManifest,
   verifyTransfer,
@@ -42,55 +40,14 @@ export interface DataPlan {
   readonly limitations: readonly string[];
 }
 
-export async function planSeed(
+export async function planDesired(
   client: DataverseClient,
   input: unknown,
   environment: SchemaEnvironment,
 ): Promise<DataPlan> {
-  const seed = await buildSeed(input);
-  const manifest = await createManifest(
-    seed.model,
-    seed.data,
-    {
-      name: "synthetic",
-      url: "https://synthetic.invalid",
-      organizationId: seed.namespaceFingerprint,
-    },
-    seed.mapping,
-  );
-  return planData(
-    client,
-    manifest,
-    seed.mapping,
-    environment,
-    "seed",
-    seed.namespaceFingerprint,
-  );
-}
-
-export async function planDataverseTransfer(
-  client: DataverseClient,
-  input: unknown,
-  policy: unknown,
-  mapping: DataverseMapping,
-  environment: SchemaEnvironment,
-): Promise<DataPlan> {
-  const manifest = await parseManifest(input);
-  assertTransferSource(manifest, environment);
-  const transformed = await createManifest(
-    manifest.model,
-    applyDataPolicy(manifest.model, manifest.data, policy),
-    manifest.source.environment,
-    manifest.source.mapping,
-  );
-  return planData(
-    client,
-    transformed,
-    parseMapping(mapping),
-    environment,
-    "transfer",
-    await fingerprint(policy),
-  );
+  const { manifest, mapping, purpose, basis } = await resolveDesired(input);
+  if (purpose === "transfer") assertTransferSource(manifest, environment);
+  return planData(client, manifest, mapping, environment, purpose, basis);
 }
 
 async function planData(

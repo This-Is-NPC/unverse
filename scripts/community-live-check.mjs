@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { parseModel, planSchema } from "../packages/core/dist/index.js";
+import {
+  parseModel,
+  planSchema,
+  seedDesired,
+} from "../packages/core/dist/index.js";
 import sourceData from "../packages/core/test/fixtures/data.json" with {
   type: "json",
 };
@@ -9,7 +13,7 @@ import {
   applyDataPlan,
   applySchema,
   inspectSchema,
-  planSeed,
+  planDesired,
   query,
   tables,
 } from "../packages/dataverse/dist/index.js";
@@ -124,7 +128,11 @@ try {
         mapping,
         rows,
       };
-      const dataPlan = await planSeed(client, seed, environment);
+      const dataPlan = await planDesired(
+        client,
+        await seedDesired(seed),
+        environment,
+      );
       assert.equal(dataPlan.create.length, 2);
       const report = await applyDataPlan(client, dataPlan, environment, true);
       assert.equal(report.verified, true);

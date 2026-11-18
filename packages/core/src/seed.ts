@@ -7,6 +7,15 @@ import {
 } from "./schema.js";
 import { type Dataset, normalizeDataset } from "./values.js";
 
+export async function seedId(
+  namespace: string,
+  entity: string,
+  key: string,
+): Promise<string> {
+  const hash = await fingerprint([namespace, entity, key]);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-${((Number.parseInt(hash[16] ?? "0", 16) & 3) | 8).toString(16)}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
 export async function buildSeed(input: unknown) {
   const spec = record(input);
   if (
@@ -54,11 +63,7 @@ export async function buildSeed(input: unknown) {
       const key = JSON.stringify([entity.name, row.key]);
       if (ids.has(key))
         throw new SchemaError("invalid-input", "Duplicate seed row key.");
-      const hash = await fingerprint([spec.seed, entity.name, row.key]);
-      ids.set(
-        key,
-        `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-${((Number.parseInt(hash[16] ?? "0", 16) & 3) | 8).toString(16)}${hash.slice(17, 20)}-${hash.slice(20, 32)}`,
-      );
+      ids.set(key, await seedId(spec.seed, entity.name, row.key));
     }
   }
   const data: Record<string, readonly Record<string, unknown>[]> = {};

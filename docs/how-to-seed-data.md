@@ -23,8 +23,13 @@ which may be empty. External references are not portable seed relationships.
 1. Save a preview. Paths below are placeholders:
 
    ```sh
-   unverse seed plan --env dev --seed-file seed.json --format json > seed-plan.json
+   unverse pipeline plan seed --env dev --format json -- --seed seed.json > seed-plan.json
    ```
+
+   `seed` is a built-in [pipeline](how-to-write-a-pipeline.md). Its `--seed`
+   flag comes after `--`. A value that is a plain name, such as `demo`, reads
+   `.unverse/seeds/demo.json` in your project; anything with a path or a
+   `.json` ending is read as given.
 
    The installed related fixture produced two proposed row creations. IDs
    are SHA-256-derived UUIDs from the namespace, entity, and row key. Repeating

@@ -38,6 +38,7 @@ export interface CommandSpec {
   readonly flags?: readonly FlagSpec[];
   readonly positionals?: readonly PositionalSpec[];
   readonly groups?: readonly OneOfGroup[];
+  readonly passthrough?: boolean;
   readonly outputs: readonly Format[];
   readonly exits?: Readonly<Record<number, string>>;
 }
@@ -91,6 +92,14 @@ const graphical = [
   "svg",
 ] as const satisfies readonly Format[];
 const plain = ["human", "json"] as const satisfies readonly Format[];
+
+export const mappingFile: FlagSpec = {
+  name: "--mapping-file",
+  value: "path",
+  summary:
+    "Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.",
+  required: true,
+};
 
 const flagsets = {
   config: {
@@ -155,17 +164,7 @@ const flagsets = {
       },
     ],
   },
-  mapping: {
-    flags: [
-      {
-        name: "--mapping-file",
-        value: "path",
-        summary:
-          "Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.",
-        required: true,
-      },
-    ],
-  },
+  mapping: { flags: [mappingFile] },
   userSelector: {
     flags: [
       { name: "--user-id", value: "guid", summary: "Resolve a user by GUID." },
@@ -275,10 +274,21 @@ const modelFile: FlagSpec = {
   summary: "Read the versioned logical schema model.",
   required: true,
 };
-const manifestFile: FlagSpec = {
+export const manifestFile: FlagSpec = {
   name: "--manifest-file",
   value: "path",
   summary: "Read a canonical transfer manifest or its result envelope.",
+  required: true,
+};
+const pipelineArgument: PositionalSpec = {
+  name: "pipeline",
+  summary:
+    "Name from pipeline list, or the path of a .ts or .mjs pipeline file.",
+};
+export const policyFile: FlagSpec = {
+  name: "--policy-file",
+  value: "path",
+  summary: "Require an explicit copy or constant rule for every non-key field.",
   required: true,
 };
 const incompleteGraph = {
@@ -734,29 +744,6 @@ export const resources: readonly ResourceSpec[] = [
     ],
   },
   {
-    name: "seed",
-    summary: "Plan deterministic fixture data.",
-    commands: [
-      {
-        name: "plan",
-        stage: "plan",
-        effect: "read",
-        summary:
-          "Generate deterministic fixture IDs and review create-only data operations.",
-        flagsets: ["target", "output"],
-        flags: [
-          {
-            name: "--seed-file",
-            value: "path",
-            summary: "Read a versioned declarative seed with keyed rows.",
-            required: true,
-          },
-        ],
-        outputs: tabular,
-      },
-    ],
-  },
-  {
     name: "access",
     summary: "Plan security role assignments to teams.",
     commands: [
@@ -781,26 +768,37 @@ export const resources: readonly ResourceSpec[] = [
     ],
   },
   {
-    name: "transfer",
-    summary: "Plan a Dataverse-to-Dataverse transfer.",
+    name: "pipeline",
+    summary: "Run data pipelines that produce reviewed create-only plans.",
     commands: [
+      {
+        name: "list",
+        stage: "other",
+        effect: "read",
+        summary:
+          "List the built-in pipelines and those found in .unverse/pipelines without contacting Dataverse.",
+        flagsets: ["config", "output"],
+        outputs: tabular,
+      },
+      {
+        name: "show",
+        stage: "other",
+        effect: "read",
+        summary:
+          "Show a pipeline's description and its own flags without contacting Dataverse.",
+        flagsets: ["config", "output"],
+        positionals: [pipelineArgument],
+        outputs: tabular,
+      },
       {
         name: "plan",
         stage: "plan",
         effect: "read",
         summary:
-          "Review a policy-filtered Dataverse-to-Dataverse create-only transfer.",
-        flagsets: ["target", "output", "mapping"],
-        flags: [
-          manifestFile,
-          {
-            name: "--policy-file",
-            value: "path",
-            summary:
-              "Require an explicit copy or constant rule for every non-key field.",
-            required: true,
-          },
-        ],
+          "Run a pipeline with a read-only context and review its create-only data operations.",
+        flagsets: ["target", "output"],
+        positionals: [pipelineArgument],
+        passthrough: true,
         outputs: tabular,
       },
     ],

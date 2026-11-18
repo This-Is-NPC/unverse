@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PostgresStore } from "@unverse/postgres";
 import {
   createDataverseClient,
@@ -24,6 +25,8 @@ const exitCode = await runCli(process.argv.slice(2), {
       () => true,
       () => false,
     ),
+  listDirectory: (path) => readdir(path),
+  loadModule: (path) => import(pathToFileURL(path).href),
   cwd: process.cwd(),
   env: process.env,
   now: () => new Date().toISOString(),

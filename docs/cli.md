@@ -502,22 +502,6 @@ Trace observed downstream consumers and explain potential impact paths.
 
 - `7`: The graph or its dependency closure is incomplete.
 
-## seed plan
-
-Generate deterministic fixture IDs and review create-only data operations.
-
-- Effect: `read`
-- Output formats: `human` (default), `json`, `csv`
-
-`unverse seed plan [--config <path>] [--env <name>] [--format <human|json|csv>] --seed-file <path>`
-
-### Flags
-
-- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
-- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
-- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--seed-file <path>` (required): Read a versioned declarative seed with keyed rows.
-
 ## access plan
 
 Resolve teams and the roles in their business units and review add-only role assignments.
@@ -534,23 +518,60 @@ Resolve teams and the roles in their business units and review add-only role ass
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--access-file <path>` (required): Read a versioned document listing teams and the role names each team needs.
 
-## transfer plan
+## pipeline list
 
-Review a policy-filtered Dataverse-to-Dataverse create-only transfer.
+List the built-in pipelines and those found in .unverse/pipelines without contacting Dataverse.
 
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse transfer plan [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path> --manifest-file <path> --policy-file <path>`
+`unverse pipeline list [--config <path>] [--format <human|json|csv>]`
+
+### Flags
+
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+
+## pipeline show
+
+Show a pipeline's description and its own flags without contacting Dataverse.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse pipeline show <pipeline> [--config <path>] [--format <human|json|csv>]`
+
+### Arguments
+
+- `<pipeline>`: Name from pipeline list, or the path of a .ts or .mjs pipeline file.
+
+### Flags
+
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+
+## pipeline plan
+
+Run a pipeline with a read-only context and review its create-only data operations.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse pipeline plan <pipeline> [--config <path>] [--env <name>] [--format <human|json|csv>] [-- <pipeline flags>]`
+
+### Arguments
+
+- `<pipeline>`: Name from pipeline list, or the path of a .ts or .mjs pipeline file.
 
 ### Flags
 
 - `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
 - `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
-- `--manifest-file <path>` (required): Read a canonical transfer manifest or its result envelope.
-- `--policy-file <path>` (required): Require an explicit copy or constant rule for every non-key field.
+
+### Pipeline flags
+
+- Everything after -- is parsed against the pipeline's own flags; unverse pipeline show lists them.
 
 ## pg export
 

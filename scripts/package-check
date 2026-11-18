@@ -12,11 +12,16 @@ const root = process.env.MISE_PROJECT_ROOT ?? process.cwd();
 const consumer = installConsumer(root);
 let browser;
 let installedGraph;
+const withJson = (args) => {
+  const separator = args.indexOf("--");
+  const end = separator === -1 ? args.length : separator;
+  return [...args.slice(0, end), "--format", "json", ...args.slice(end)];
+};
 try {
   const environment = await stageScenes(root, consumer);
   assert.match(run(consumer.executable, ["--help"], consumer.directory), /role check/);
   for (const scene of scenes.slice(1).filter((scene) => scene.render === undefined && scene.args.includes("--env"))) {
-    const result = JSON.parse(run(consumer.executable, [...scene.args, "--format", "json"], consumer.directory, environment));
+    const result = JSON.parse(run(consumer.executable, withJson(scene.args), consumer.directory, environment));
     assert.equal(result.status, "ok");
     assert.equal(result.environment.name, "dev");
     if (scene.name === "25-dependency-graph") installedGraph = result.data.graph;

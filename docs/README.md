@@ -21,7 +21,9 @@ tarballs; no npm publication is implied.
 6. [Export data](how-to-export-data.md), [import it](how-to-import-data.md),
    and [verify the transfer](how-to-verify-transfer.md).
    [Assign roles to teams](how-to-assign-team-roles.md) with a reviewed plan.
-7. Contributors start with [design](design.md) and [agent rules](../AGENTS.md).
+7. [Write your own pipeline](how-to-write-a-pipeline.md) when seed and
+   transfer do not fit.
+8. Contributors start with [design](design.md) and [agent rules](../AGENTS.md).
 
 ## When you know what you want
 
@@ -47,6 +49,7 @@ tarballs; no npm publication is implied.
 | How do I seed reproducible development data? | [Seed data](how-to-seed-data.md) |
 | How do I give a team its security roles? | [Assign team roles](how-to-assign-team-roles.md) |
 | How do I transfer without clearing the destination? | [Dataverse transfer](how-to-transfer-dataverse.md) |
+| How do I plan data from my own code? | [Write a pipeline](how-to-write-a-pipeline.md) |
 | Which connector and connection bindings are visible? | [Inspect connections](how-to-inspect-connections.md) |
 | How do I visualize artifact dependencies? | [Explore dependencies](how-to-explore-dependencies.md) |
 | Which observed consumers should I review? | [Assess impact](how-to-assess-dependency-impact.md) |

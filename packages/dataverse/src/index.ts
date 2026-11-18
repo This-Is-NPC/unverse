@@ -18,8 +18,7 @@ export {
 export {
   applyDataPlan,
   type DataPlan,
-  planDataverseTransfer,
-  planSeed,
+  planDesired,
 } from "./data-plan.js";
 export { type DependencyOptions, dependencyGraph } from "./dependencies.js";
 export {

@@ -21,6 +21,7 @@ export interface Invocation {
   readonly route: Route;
   readonly flags: ReadonlyMap<string, string>;
   readonly positionals: ReadonlyMap<string, string>;
+  readonly rest: readonly string[];
   readonly format: Format;
 }
 
@@ -82,8 +83,15 @@ export function parseInvocation(argv: readonly string[]): Parsed {
   };
 }
 
-function parseCommand(route: Route, tokens: readonly string[]): Invocation {
+export function parseCommand(
+  route: Route,
+  argumentsList: readonly string[],
+): Invocation {
   const command: CommandSpec = route.command;
+  const separator =
+    command.passthrough === true ? argumentsList.indexOf("--") : -1;
+  const tokens =
+    separator === -1 ? argumentsList : argumentsList.slice(0, separator);
   const flags = commandFlags(command);
   const values = new Map<string, string>();
   const words: string[] = [];
@@ -158,6 +166,7 @@ function parseCommand(route: Route, tokens: readonly string[]): Invocation {
     positionals: new Map(
       declared.map(({ name }, index) => [name, words[index] ?? ""]),
     ),
+    rest: separator === -1 ? [] : argumentsList.slice(separator + 1),
     format: (values.get("--format") ?? "human") as Format,
   };
 }

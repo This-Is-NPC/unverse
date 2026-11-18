@@ -156,7 +156,7 @@ Every command is `unverse <group> <command>` or the root command
 | `artifact` | `types` prints the built-in artifact catalog offline; `list <type>` reads one type as normalized items (§19) |
 | `user`, `role` | `user list`, `user show` (direct and team roles), and `role check` |
 | `deps` | `list`, `graph`, and `impact` dependency evidence |
-| `seed`, `transfer` | `plan` for fixture data and Dataverse-to-Dataverse transfer |
+| `pipeline` | `list` and `show` read pipelines offline; `plan <pipeline> -- <flags>` runs one and prints a data plan (§22) |
 | `pg` | `export`, `import`, and `verify` for the PostgreSQL transfer |
 | `apply`, `verify` | Execute or re-check any reviewed plan file: `apply <plan-file>` writes, `verify <plan-file>` reads |
 
@@ -385,10 +385,11 @@ application-level rule, not an SQL NOT NULL guarantee. That limitation appears
 in plan and apply results. SQL schema inference is not used.
 
 Every plan document is self-describing. Besides its environment binding and
-fingerprints it carries `kind` (`schema` or `data`) and `effect` (`write` or
+fingerprints it carries `kind` (`schema`, `data` or `access`) and `effect` (`write` or
 `destructive`). Both are part of what apply recomputes and compares, so a
 plan whose kind or effect was edited is rejected as modified. Schema plans and
-data plans (seed and transfer, §16) are the two kinds; every plan written today
+data plans (pipelines, §§16 and 22) and access plans (§21) are the three
+kinds; every plan written today
 has effect `write`, except a schema plan made with `--prune`, which has effect
 `destructive`. `apply` refuses a destructive plan unless the invocation also
 passes `--destructive`; the check runs before the first request.
@@ -427,7 +428,7 @@ list no longer contains the object, then stops with a `service` error.
 
 `unverse apply <plan-file> --env <name> --confirm` is the only way to execute
 a plan. It reads the plan (the bare plan or the result envelope that
-`schema plan`, `seed plan`, or `transfer plan` printed), dispatches by `kind`
+`schema plan` or `pipeline plan` printed), dispatches by `kind`
 to the guarded executor, and resolves the environment independently of the
 plan. `unverse verify <plan-file> --env <name>` re-inspects the target without
 writing and reports `satisfied`; it exits 1 when operations remain or are
@@ -489,7 +490,7 @@ is metadata-only: seed, portable export/import, and equivalence checks reject
 external references. Model related entities explicitly for portable datasets.
 
 The mapping is a JSON document passed with `--mapping-file <path>` to
-`schema inspect`, `schema plan`, `transfer plan` and `pg export`; there are no
+`schema inspect`, `schema plan`, `pg export` and the `transfer` pipeline; there are no
 separate prefix or solution flags. Two Dataverse solution components are
 declared in the same document, not in the portable model, so PostgreSQL
 ignores them:
@@ -656,6 +657,10 @@ array expand into rows; other results retain nested JSON cells. All fields are
 quoted, records use CRLF, and formula-prefixed cells receive an apostrophe.
 JSON remains the lossless artifact format. CSV does not anonymize personal data.
 
+Seed and transfer are the built-in pipelines of §22: `pipeline plan seed` and
+`pipeline plan transfer` each turn their input into desired data, and one
+function, `planDesired`, validates it and builds the data plan.
+
 Seed specs bind a logical model, physical mapping, namespace, and keyed rows.
 IDs are deterministic SHA-256-derived UUIDv8 values from namespace/entity/key.
 References resolve through keyed rows, including cycles; duplicate or unresolved
@@ -667,7 +672,7 @@ replaced by a valid constant. IDs remain unchanged and may still identify
 people. The feature is not an automatic anonymizer. Source and target
 organizations must differ; source rereading and continuous sync are not implied.
 
-Both use one data plan/executor. Plans bind transformed data, target identity,
+Every pipeline uses one data plan/executor. Plans bind transformed data, target identity,
 current target fingerprint, proposed creates, conflicts, and policy fingerprint.
 `apply` requires confirmation, validates plan integrity (the plan has `kind`
 `data` and `effect`, covered by its fingerprint), re-authenticates the
@@ -810,6 +815,10 @@ choices for values, and one document tools can read. Each command declares:
   selector. The parser enforces them; commands do not validate by hand.
 - outputs: the allowed `--format` values, default `human`.
 - exits: meanings that differ from the global table in §8, which stays.
+- passthrough: the command hands everything after `--` to a second parse. Only
+  `pipeline plan` sets it; the second parse uses the same parser against a
+  synthetic command built from the pipeline's `params`, so help, choices,
+  required flags, and the repeated-flag rule are identical.
 
 **What consumers may rely on.** A command whose effect is `read` never writes
 to Dataverse or PostgreSQL, so `unverse spec` lets an agent or a shell policy
@@ -820,7 +829,7 @@ allowlist exactly those commands. A `write` command refuses to run without
 `--name=value` or `--name value`; `--name=` binds the empty string and normal
 validation applies. A detached value cannot start with `-`, so a negative
 number is written `--limit=-1`. `--` ends flag parsing and the rest are
-positionals. `-h` and `--help` are the only help flags and there are no other
+positionals; on `pipeline plan` the rest are the pipeline's own flags (§22). `-h` and `--help` are the only help flags and there are no other
 short flags. An unknown command or flag, a flag that does not belong to the
 command, a missing required flag or positional, an extra positional, a group
 violation, and a value outside its choices are input errors with exit 2. A
@@ -837,7 +846,7 @@ rather than last-wins, because this tool writes to production. There is no
 flag abbreviation. There is no `jsonl` format because nothing streams.
 
 **Growth.** A new feature adds a resource, a section in an existing document,
-or a pipeline. It does not add a verb or another flow beside observe, plan,
+or a pipeline (§22). It does not add a verb or another flow beside observe, plan,
 and apply.
 
 ## 19. Artifact catalog
@@ -971,3 +980,85 @@ A blocked plan is rejected before any write. Each operation is one
 `verified` is true when no operation or blocked role remains. `verify`
 performs that read without writing. A role is never removed from a team, and
 no user assignment or effective record access is checked.
+
+## 22. Pipelines
+
+A pipeline is the user's own code that decides which rows a target should
+hold. Unverse stays agnostic to what a pipeline does and keeps the guarantee
+that a pipeline cannot write: it returns desired data, and Unverse validates
+that data, builds a data plan (§16), and leaves the write to `apply`.
+
+**Where pipelines live.** `<project>/.unverse/pipelines/<name>.ts` or
+`.mjs`, where `<project>` is the directory that holds `.unverse/config.json`
+(found by the discovery of §6; with `--config` pointing elsewhere, the config
+file's directory). Node 24 strips erasable TypeScript natively, so a `.ts`
+file needs no build step and may not use enums or other non-erasable syntax.
+A name is lowercase letters, digits, and hyphens. Both extensions for one
+name, an invalid name, and a name that is a built-in are errors at discovery;
+`seed` and `transfer` cannot be shadowed. A path argument
+(`pipeline plan ./one-off.mjs`) runs that file directly.
+
+**The module.** The default export is `{ description, params?, run }`.
+`params` is an array of the flag objects of the command spec (`name`, `value`
+placeholder or null, `summary`, `required`, `choices`); there is no second
+schema. `run(context)` returns desired data:
+
+```ts
+interface DesiredData {
+  model: SchemaModel; mapping: DataverseMapping;
+  data: Record<string, Record<string, unknown>[]>;   // rows with IDs
+  source?: { environment: SchemaEnvironment; mapping: DataverseMapping };
+  basis?: string;
+}
+```
+
+`planDesired` validates it exactly as a seed or manifest is validated
+(`parseModel`, `parseMapping`, `normalizeDataset`; unknown keys fail). Without
+`source` the data plan has purpose `seed` and a synthetic source; with
+`source` it has purpose `transfer`, and the target organization must differ
+from the source. `basis` is what the plan fingerprints as the input that
+determined the rows; it defaults to the dataset fingerprint. The plan is
+create-only and bound to the `--env` target; conflicts block, and updates are
+not part of it.
+
+**The context.**
+
+```ts
+interface PipelineContext {
+  params: Record<string, string | boolean>;   // keys without the leading --
+  target: string;                              // the --env name
+  read(environment: string, path: string): Promise<Record<string, unknown>[]>;
+  readJson(path: string): Promise<unknown>;    // relative to the project
+  seedId(namespace: string, entity: string, key: string): Promise<string>;
+}
+```
+
+`read` connects the named profile through the same `connect` as every command
+(organization pins apply), runs `DataverseClient.collect` (every page, GET
+only), and returns rows. The object is frozen and holds exactly these five
+properties: no client, no `write`, no token. A test enumerates the property
+names and a named mutation that adds the client must fail it.
+
+**Parameters.** Pipeline flags come after `--`. Unverse resolves the pipeline,
+builds a synthetic command whose flags are its `params`, and runs
+`parseCommand` on the tokens after `--`. `-- --help` prints that synthetic
+command's help. Parsing finishes before any connection, so a bad flag exits 2
+without a request.
+
+**Built-ins.** `seed` takes `--seed <name|path>`: a name (letters, digits,
+`.`, `_`, `-`, not ending in `.json`) resolves to `.unverse/seeds/<name>.json`
+and anything else is a file path used as is. `transfer` takes
+`--mapping-file`, `--manifest-file`, and `--policy-file`. Both call the same
+`planDesired` as a user pipeline.
+
+**Errors.** A bad pipeline file, bad flags, an invalid desired dataset, and an
+exception thrown by the pipeline's own code (reported as `Pipeline <name>
+failed: ...`) exit 2. A Dataverse failure inside `read` keeps its code (3, 4, or
+5).
+
+**Not a sandbox.** Unverse does not sandbox user code. Loading a pipeline,
+even for `pipeline list` or `show`, runs its top-level code, and `run` executes
+with the caller's permissions: it can read files, use the network, and read
+environment variables, including credentials. The guarantee is only that the
+context Unverse hands it cannot write; review a pipeline as you would any
+script before you run it.

@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { InputError } from "./arguments.js";
 
 export const configFile = join(".unverse", "config.json");
@@ -73,3 +73,8 @@ export const configTemplate = `${JSON.stringify(
   null,
   2,
 )}\n`;
+
+export function projectRoot(configPath: string): string {
+  const directory = dirname(configPath);
+  return basename(directory) === ".unverse" ? dirname(directory) : directory;
+}

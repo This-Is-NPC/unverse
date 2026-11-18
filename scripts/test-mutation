@@ -53,14 +53,14 @@ mutations.push(
   ["decimal-loss", "core/values.js", 'fraction.slice(scale).replaceAll("0", "") !== ""', "false", "core", "rejects missing columns, broken references, and lossy decimals", "transfer"],
   ["identity-ledger-count", "core/transfer.js", "Object.keys(identities[entity.name] ?? {}).length !== expected.length", "false", "core", "detects extra identity ledger entries and extra rows", "transfer"],
   ["postgres-primary-key", "postgres/index.js", "keys.rows.length !== 1 ||\n                keys.rows[0]?.column_name !== entity.primaryKey", "false", "postgres", "PostgreSQL detects a removed primary key", "postgres"],
-  ["raw-manifest", "cli/run.js", "return input.outputVersion === outputVersion ? input.data : input;", "return input.data ?? input;", "cli", "CLI transfer verification uses PostgreSQL without requesting a Dataverse token"],
+  ["raw-manifest", "cli/documents.js", "return input.outputVersion === outputVersion ? input.data : input;", "return input.data ?? input;", "cli", "CLI transfer verification uses PostgreSQL without requesting a Dataverse token"],
   ["table-label", "dataverse/query.js", "table.displayName, table.entitySet", "null, table.entitySet", "dataverse", "table search resolves display labels and entity sets", "query"],
   ["flow-category", "dataverse/discovery.js", "category eq 5", "category eq 0", "dataverse", "flow discovery restricts reads to cloud flows", "discovery"],
   ["variable-mask", "dataverse/discovery.js", 'value: "[MASKED]"', "value: _value", "dataverse", "variable inventory masks values and never reads secret overrides", "discovery"],
   ["variable-secret", "dataverse/discovery.js", "type === 100000005", "false", "dataverse", "variable inventory masks values and never reads secret overrides", "discovery"],
   ["variable-compare", "dataverse/discovery.js", "row.value !== other.value", "false", "dataverse", "comparison detects private value differences without exposing values or hashes", "discovery"],
   ["variable-unknown", "dataverse/discovery.js", "unknown.push(row.schemaName)", "void row.schemaName", "dataverse", "secret comparisons remain unknown instead of equal", "discovery"],
-  ["seed-namespace", "core/seed.js", "[spec.seed, entity.name, row.key]", '["constant", entity.name, row.key]', "core", "seed IDs are deterministic and relationships resolve to generated IDs", "seed"],
+  ["seed-namespace", "core/seed.js", "[namespace, entity, key]", '["constant", entity, key]', "core", "seed IDs are deterministic and relationships resolve to generated IDs", "seed"],
   ["seed-duplicates", "core/seed.js", "ids.has(key)", "false", "core", "seed rejects duplicate row keys and missing references", "seed"],
   ["data-confirm", "dataverse/data-plan.js", "if (!confirm)", "if (false)", "dataverse", "Dataverse data apply rejects missing confirmation before writes", "data-plan"],
   ["data-environment", "dataverse/data-plan.js", "canonical(value.environment) !== canonical(environment)", "false", "dataverse", "Dataverse data plans bind the target environment", "data-plan"],
@@ -146,7 +146,7 @@ mutations.push(
 );
 
 mutations.push(
-  ["mapping-components", "cli/run.js", "JSON.parse(await runtime.readFile(flags.get(\"--mapping-file\") ?? \"\"))", "(({ prefix, solution }) => ({ prefix, solution }))(JSON.parse(await runtime.readFile(flags.get(\"--mapping-file\") ?? \"\")))", "cli", "CLI schema planning reads solution components from the mapping file"],
+  ["mapping-components", "cli/documents.js", "parseMapping(JSON.parse(await readFile(path)))", "parseMapping((({ prefix, solution }) => ({ prefix, solution }))(JSON.parse(await readFile(path))))", "cli", "CLI schema planning reads solution components from the mapping file"],
 );
 
 mutations.push(
@@ -172,6 +172,10 @@ mutations.push(
 mutations.push(
   ["discovery-walk", "cli/project.js", "if (parent === directory)", "if (true)", "cli", "discovers .unverse/config.json from a nested directory", "project"],
   ["environment-precedence", "cli/project.js", 'const flag = flags.get("--env");', 'const flag = variable(runtime, "UNVERSE_ENV") ?? flags.get("--env");', "cli", "--env beats UNVERSE_ENV and records its origin", "project"],
+  ["pipeline-context-client", "cli/pipeline.js", "target: options.target,", "target: options.target, client: options.targetClient,", "cli", "the context hands a pipeline no way to write", "pipeline"],
+  ["pipeline-params-unchecked", "cli/pipeline.js", "const { flags } = parseCommand(route, rest);", "const flags = new Map();", "cli", "pipeline flags after the separator are parsed against the pipeline's own spec", "pipeline"],
+  ["seed-name-root", "cli/builtins.js", 'join(root, ".unverse", "seeds", `${value}.json`)', "join(root, `${value}.json`)", "cli", "the seed pipeline resolves a name inside .unverse/seeds and a path as given", "pipeline"],
+  ["pipeline-shadow", "cli/pipeline.js", "if (Object.hasOwn(builtins, name))", "if (false)", "cli", "a project pipeline cannot shadow a built-in", "pipeline"],
   ["init-overwrite", "cli/run.js", "if (exists && (await runtime.readFile(path)) !== configTemplate)", "if (false)", "cli", "init refuses to overwrite a different file", "project"],
 );
 
