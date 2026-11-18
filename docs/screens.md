@@ -65,7 +65,9 @@ fixture configuration; the pictures show that directory as `/work/project`.
 
 ## 6. Expected assignment
 
-`role check` distinguishes a completed missing expectation from failed reads.
+`role check` reports whether the expected role is assigned. Here it is
+(`"assigned": true`); a completed missing expectation exits 1, and a failed
+read is an error, not a missing role.
 
 ![Role check](img/06-check-role.png)
 
@@ -174,7 +176,7 @@ The synthetic profiles match. Real differences report field names, never values.
 ## 23. Applying seed and Dataverse transfer plans
 
 Neither has a persistent screen or interactive confirmation dialog. `apply`
-of either plan requires `--confirm` and print verification with a changeset checkpoint. The
+of either plan requires `--confirm` and prints verification with a changeset checkpoint. The
 picture renderer does not issue writes. Installed-package checks exercise
 satisfied-plan resume, while synthetic integration exercises creates and links.
 CSV is an output format for these same commands, not another screen.
@@ -228,8 +230,8 @@ artifact, and selecting it opens identifiers and evidence in a details panel
 that closes with `×`, `Escape` or a click on the background. `☰` opens type
 and relation filters and the legend; the coverage status opens the snapshot
 summary. The page follows the browser's light or dark setting; the picture
-shows light. Blue outlines indicate
-requirements, amber outlines consumers, and double borders observed cycles.
+shows light. Selecting a node outlines its requirements in blue and its
+consumers in amber, and fades the rest; double borders mark observed cycles.
 Arrows point from consumer to requirement. Dashed edges are membership or
 explicit bindings, not invented platform dependencies. Filters, group expansion
 and neighborhood focus do not fetch more data. Arrow keys pan a focused canvas;
@@ -285,7 +287,7 @@ fixture app is a code app; a field the source does not return is absent.
 
 ## 36. Pipelines
 
-`unverse pipeline list` shows the built-in `seed` and `transfer` pipelines and
+`unverse pipeline list` shows the built-in `seed`, `transfer` and `purge` pipelines and
 the ones found in `.unverse/pipelines`, each with its description. It loads
 the files but does not contact Dataverse. The fixture project holds the
 [example pipeline](examples/families.mjs).
