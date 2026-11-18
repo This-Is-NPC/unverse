@@ -211,7 +211,7 @@ mutations.push(
 );
 
 mutations.push(
-  ["skill-effect", "cli/help.js", "(effect: ${route.command.effect}): ", "(effect): ", "cli", "the skill lists every command path with its effect", "skill"],
+  ["skill-effect", "cli/help.js", "route.command.effect === effect", "true", "cli", "the skill lists every command path under its effect", "skill"],
 );
 
 mutations.push(

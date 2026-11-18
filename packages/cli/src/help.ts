@@ -254,21 +254,36 @@ ${routes.map(renderCommandReference).join("\n\n")}
 `;
 }
 
+// One line per command under its effect: positionals, required flags and
+// exactly-one groups only; optional flags are left to `--help`.
 export function renderSkillCommands(): string {
-  return stages
-    .flatMap(({ stage, title }) => [
-      `### ${title}`,
-      "",
-      ...routes
-        .filter((route) => route.command.stage === stage)
-        .map(
-          (route) =>
-            `- \`${route.path}\` (effect: ${route.command.effect}): \`${usage(route)}\``,
-        ),
-      "",
-    ])
+  const effects = ["read", "write", "destructive"] as const;
+  return effects
+    .map((effect) => ({
+      effect,
+      lines: routes
+        .filter((route) => route.command.effect === effect)
+        .map((route) => `- \`${skillUsage(route)}\``),
+    }))
+    .filter(({ lines }) => lines.length > 0)
+    .flatMap(({ effect, lines }) => [`### ${effect}`, "", ...lines, ""])
     .join("\n")
     .trimEnd();
+}
+
+function skillUsage(route: Route): string {
+  const flags = commandFlags(route.command);
+  const groups = commandGroups(route.command);
+  const grouped = new Set(groups.flatMap((group) => group.flags));
+  return [
+    route.path,
+    ...(route.command.positionals ?? []).map(positionalText),
+    ...flags
+      .filter((flag) => flag.required === true && !grouped.has(flag.name))
+      .map(flagText),
+    ...groups.map((group) => groupText(group, flags)),
+    ...(route.command.passthrough === true ? ["-- <pipeline flags>"] : []),
+  ].join(" ");
 }
 
 export function specDocument(): unknown {
