@@ -127,6 +127,10 @@ mutations.push(
   ["option-removal", "core/plan.js", "have.some((option) => !want.some(", "false && have.some((option) => !want.some(", "dataverse", "choice label changes, value changes, and removals stay blocked", "schema"],
   ["option-addition", "core/plan.js", "return want.filter((wanted) => !have.some(", "return [].filter((wanted) => !have.some(", "dataverse", "choice options absent in Dataverse are added to the solution", "schema"],
   ["option-solution", "dataverse/schema.js", "SolutionUniqueName: mapping.solution,", 'SolutionUniqueName: "Other",', "dataverse", "choice options absent in Dataverse are added to the solution", "schema"],
+  ["data-error-unknown", "dataverse/schema.js", 'holdsData: "unknown",\n            evidence: `Read ${read} failed', 'holdsData: false,\n            evidence: `Read ${read} failed', "dataverse", "blocked column removals record whether the column holds data", "schema"],
+  ["data-type-unknown", "dataverse/schema.js", "if (!filterableTypes.includes(column.providerType))", "if (false)", "dataverse", "blocked column removals record whether the column holds data", "schema"],
+  ["data-probe-limit", "dataverse/schema.js", '$top: "1",', '$top: "5",', "dataverse", "blocked column removals record whether the column holds data", "schema"],
+  ["data-holds", "dataverse/schema.js", "holdsData: rows.rows.length !== 0,", "holdsData: false,", "dataverse", "blocked column removals record whether the column holds data", "schema"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

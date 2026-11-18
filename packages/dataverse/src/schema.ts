@@ -6,6 +6,7 @@ import {
   type Key,
   type ObservedColumn,
   type ObservedKey,
+  ownedColumnsOutsideModel,
   parseMapping,
   parseModel,
   physicalColumn,
@@ -19,7 +20,7 @@ import {
   type SchemaSnapshot,
 } from "@unverse/core";
 import { type DataverseClient, DataverseError } from "./client.js";
-import { endpoint, guid, literal, text } from "./odata.js";
+import { endpoint, guid, identifier, literal, text } from "./odata.js";
 
 export async function inspectSchema(
   client: DataverseClient,
@@ -28,7 +29,8 @@ export async function inspectSchema(
 ): Promise<SchemaSnapshot> {
   const definitions = await client.collect(
     endpoint("EntityDefinitions", {
-      $select: "LogicalName,MetadataId,PrimaryIdAttribute,PrimaryNameAttribute",
+      $select:
+        "LogicalName,EntitySetName,MetadataId,PrimaryIdAttribute,PrimaryNameAttribute",
     }),
   );
   const entities = [];
@@ -70,30 +72,48 @@ export async function inspectSchema(
     const keys = await client.collect(
       `EntityDefinitions(LogicalName='${safeName(name)}')/Keys`,
     );
+    const modeled = model?.entities.find(
+      (candidate) => physicalEntity(mapping, candidate) === name,
+    );
+    const observedColumns = columns.rows
+      .filter(
+        (column) =>
+          column.IsLogical !== true &&
+          (column.AttributeOf === undefined || column.AttributeOf === null),
+      )
+      .map((column) =>
+        normalizeColumn(
+          {
+            ...column,
+            ...picklists.rows.find(
+              (picklist) => picklist.LogicalName === column.LogicalName,
+            ),
+          },
+          mapping,
+          externalKeys,
+        ),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const owned =
+      modeled === undefined
+        ? []
+        : ownedColumnsOutsideModel(mapping, modeled, observedColumns);
+    for (const column of owned)
+      observedColumns[observedColumns.indexOf(column)] = {
+        ...column,
+        data: await probeData(
+          client,
+          text(entity, "EntitySetName"),
+          text(entity, "PrimaryIdAttribute"),
+          column,
+        ),
+      };
     entities.push({
       name,
       metadataId: text(entity, "MetadataId"),
       primaryKey: text(entity, "PrimaryIdAttribute"),
       primaryName: text(entity, "PrimaryNameAttribute"),
-      columns: columns.rows
-        .filter(
-          (column) =>
-            column.IsLogical !== true &&
-            (column.AttributeOf === undefined || column.AttributeOf === null),
-        )
-        .map((column) =>
-          normalizeColumn(
-            {
-              ...column,
-              ...picklists.rows.find(
-                (picklist) => picklist.LogicalName === column.LogicalName,
-              ),
-            },
-            mapping,
-            externalKeys,
-          ),
-        )
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      columns: observedColumns,
       keys: keys.rows
         .map(normalizeKey)
         .sort((a, b) => a.name.localeCompare(b.name)),
@@ -447,6 +467,54 @@ export async function assertEnvironment(
       "invalid-input",
       "The supplied environment does not match the authenticated client.",
     );
+}
+
+const filterableTypes = [
+  "String",
+  "Integer",
+  "BigInt",
+  "Decimal",
+  "Double",
+  "Money",
+  "Boolean",
+  "DateTime",
+  "Picklist",
+  "Uniqueidentifier",
+];
+
+async function probeData(
+  client: DataverseClient,
+  entitySet: string,
+  primaryKey: string,
+  column: ObservedColumn,
+): Promise<NonNullable<ObservedColumn["data"]>> {
+  if (!filterableTypes.includes(column.providerType))
+    return {
+      holdsData: "unknown",
+      evidence: `A ${column.providerType} column cannot be filtered for values, so it was not read.`,
+    };
+  const read = `${entitySet}?$select=${primaryKey}&$filter=${column.name} ne null&$top=1`;
+  try {
+    const rows = await client.collect(
+      endpoint(entitySet, {
+        $select: identifier(primaryKey),
+        $filter: `${identifier(column.name)} ne null`,
+        $top: "1",
+      }),
+      1,
+    );
+    return {
+      holdsData: rows.rows.length !== 0,
+      evidence: `Read ${read} returned ${rows.rows.length === 0 ? "no rows" : "a row"} for this identity.`,
+    };
+  } catch (error) {
+    if (!(error instanceof DataverseError) || error.code === "authentication")
+      throw error;
+    return {
+      holdsData: "unknown",
+      evidence: `Read ${read} failed (${error.code}): ${error.message}`,
+    };
+  }
 }
 
 function normalizeKey(row: Record<string, unknown>): ObservedKey {

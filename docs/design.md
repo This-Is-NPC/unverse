@@ -330,7 +330,19 @@ operation, listed after every column and relationship operation. An existing
 key with the same columns is satisfied. A key with other columns, a key on the
 same columns under another name, and a prefix-owned key absent from the model
 are blocked; keys are never changed or deleted. A satisfied key whose index
-status is not `Active` is listed under `unverified`, not as done. Dataverse RequiredLevel is an
+status is not `Active` is listed under `unverified`, not as done.
+
+For every blocked removal of a prefix-owned column the plan records
+`holdsData: true | false | "unknown"` and the `evidence` behind it, from one
+read per column: `<entity set>?$select=<primary key>&$filter=<column> ne
+null&$top=1`. A returned row is `true`; an empty result is `false` for the
+authenticated identity only, since row-level security can hide rows. A column
+type that cannot be filtered (multiline, lookups, files) is not read and is
+`unknown`. A permission or service failure on the read is `unknown` with the
+error as evidence, never `false`; an authentication failure stops the
+command. Nothing is removed. The read needs the model, so `schema inspect`
+does not run it; `schema plan` and `schema apply` do, and the result is part of
+the compared plan. Dataverse RequiredLevel is an
 application-level rule, not an SQL NOT NULL guarantee. That limitation appears
 in plan and apply results. SQL schema inference is not used.
 

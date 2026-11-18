@@ -17,9 +17,11 @@ export {
   dependencySvg,
 } from "./dependencies.js";
 export {
+  type BlockedChange,
   type ObservedColumn,
   type ObservedEntity,
   type ObservedKey,
+  ownedColumnsOutsideModel,
   planSchema,
   type SchemaEnvironment,
   type SchemaOperation,

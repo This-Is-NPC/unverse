@@ -14,7 +14,7 @@ async function plan(fixture, selected = model) {
     selected,
     mapping,
     environment,
-    await inspectSchema(fixture.client, mapping),
+    await inspectSchema(fixture.client, mapping, selected),
   );
 }
 
@@ -461,4 +461,59 @@ test("choice label changes, value changes, and removals stay blocked", async () 
     );
     assert.deepEqual(blocked.operations, []);
   }
+});
+
+test("blocked column removals record whether the column holds data", async () => {
+  const wide = parseModel({
+    ...model,
+    entities: model.entities.map((entity) => ({
+      ...entity,
+      columns: [
+        ...entity.columns,
+        { name: "notes", type: "multiline", nullable: true, maxLength: 500 },
+        { name: "status", type: "choice", nullable: true, options: [open] },
+      ],
+    })),
+  });
+  const fixture = schemaFixture({
+    rows: { uv_parent: [{ uv_amount: "1.00", uv_day: null }] },
+    denied: ["uv_status"],
+  });
+  await applySchema(
+    fixture.client,
+    await plan(fixture, wide),
+    environment,
+    true,
+  );
+  fixture.writes.length = 0;
+  const reduced = parseModel({
+    ...model,
+    entities: model.entities.map((entity) => ({
+      ...entity,
+      columns: entity.columns.filter(
+        (column) => !["amount", "day", "count"].includes(column.name),
+      ),
+    })),
+  });
+  const blocked = Object.fromEntries(
+    (await plan(fixture, reduced)).blocked.map((entry) => [entry.path, entry]),
+  );
+  assert.equal(blocked["parent.uv_amount"].holdsData, true);
+  assert.equal(blocked["parent.uv_day"].holdsData, false);
+  assert.equal(blocked["parent.uv_count"].holdsData, false);
+  assert.equal(blocked["parent.uv_notes"].holdsData, "unknown");
+  assert.match(blocked["parent.uv_notes"].evidence, /cannot be filtered/);
+  assert.equal(blocked["parent.uv_status"].holdsData, "unknown");
+  assert.match(blocked["parent.uv_status"].evidence, /permission/);
+  assert.match(blocked["parent.uv_amount"].evidence, /\$top=1 returned a row/);
+  assert.equal(fixture.probes.length, 4);
+  assert.ok(
+    fixture.probes.every(
+      (search) =>
+        search.includes("%24select=uv_parentid") &&
+        search.includes("ne+null") &&
+        search.includes("%24top=1"),
+    ),
+  );
+  assert.deepEqual(fixture.writes, []);
 });

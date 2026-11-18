@@ -69,6 +69,39 @@ supported types and a 1:N relationship. See
    column in `blocked`: every existing option must keep its value and label,
    so label changes, value changes, and removals are blocked.
 
+5. If Dataverse has custom columns under your prefix that the model no longer
+   lists, they are blocked, never removed. For each, the plan reads at most one
+   row to tell you whether the column holds data. Against the synthetic fixture,
+   with `amount` holding a value, `day` empty, and `count` unreadable by the
+   application user:
+
+   ```json
+   "blocked": [
+     {
+       "path": "parent.uv_amount",
+       "reason": "Removing an existing custom column is blocked.",
+       "holdsData": true,
+       "evidence": "Read uv_parents?$select=uv_parentid&$filter=uv_amount ne null&$top=1 returned a row for this identity."
+     },
+     {
+       "path": "parent.uv_count",
+       "reason": "Removing an existing custom column is blocked.",
+       "holdsData": "unknown",
+       "evidence": "Read uv_parents?$select=uv_parentid&$filter=uv_count ne null&$top=1 failed (permission): Access denied."
+     },
+     {
+       "path": "parent.uv_day",
+       "reason": "Removing an existing custom column is blocked.",
+       "holdsData": false,
+       "evidence": "Read uv_parents?$select=uv_parentid&$filter=uv_day ne null&$top=1 returned no rows for this identity."
+     }
+   ]
+   ```
+
+   Treat `"unknown"` as possibly holding data. `false` means this identity saw
+   no rows; row-level security can hide rows from it. Multiline text and
+   other columns that cannot be filtered are always `"unknown"`.
+
 ## What can go wrong
 
 Planning is informational: exit 0 does not mean every listed change can be

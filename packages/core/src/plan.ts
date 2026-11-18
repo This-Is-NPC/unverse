@@ -20,6 +20,10 @@ export interface ObservedColumn {
   readonly name: string;
   readonly definition: Omit<Column, "name"> | null;
   readonly providerType: string;
+  readonly data?: {
+    readonly holdsData: boolean | "unknown";
+    readonly evidence: string;
+  };
 }
 
 export interface ObservedKey {
@@ -65,6 +69,13 @@ export type SchemaOperation =
       readonly key: string;
     };
 
+export interface BlockedChange {
+  readonly path: string;
+  readonly reason: string;
+  readonly holdsData?: boolean | "unknown";
+  readonly evidence?: string;
+}
+
 export interface SchemaPlan {
   readonly planVersion: 1;
   readonly provider: "dataverse";
@@ -73,10 +84,7 @@ export interface SchemaPlan {
   readonly model: SchemaModel;
   readonly observedFingerprint: string;
   readonly operations: readonly SchemaOperation[];
-  readonly blocked: readonly {
-    readonly path: string;
-    readonly reason: string;
-  }[];
+  readonly blocked: readonly BlockedChange[];
   readonly unverified: readonly {
     readonly path: string;
     readonly reason: string;
@@ -91,7 +99,7 @@ export async function planSchema(
   snapshot: SchemaSnapshot,
 ): Promise<SchemaPlan> {
   const operations: SchemaOperation[] = [];
-  const blocked: { path: string; reason: string }[] = [];
+  const blocked: BlockedChange[] = [];
   const keyOperations: SchemaOperation[] = [];
   const unverified: { path: string; reason: string }[] = [];
   for (const entity of model.entities) {
@@ -170,18 +178,21 @@ export async function planSchema(
             });
       }
     }
-    for (const column of existing?.columns ?? []) {
-      if (
-        column.name.startsWith(`${mapping.prefix}_`) &&
-        !entity.columns.some(
-          (wanted) => physicalColumn(mapping, entity, wanted) === column.name,
-        )
-      )
-        blocked.push({
-          path: `${entity.name}.${column.name}`,
-          reason: "Removing an existing custom column is blocked.",
-        });
-    }
+    for (const column of ownedColumnsOutsideModel(
+      mapping,
+      entity,
+      existing?.columns ?? [],
+    ))
+      blocked.push({
+        path: `${entity.name}.${column.name}`,
+        reason: "Removing an existing custom column is blocked.",
+        ...(column.data === undefined
+          ? {}
+          : {
+              holdsData: column.data.holdsData,
+              evidence: column.data.evidence,
+            }),
+      });
     for (const key of entity.keys ?? []) {
       const path = `${entity.name}.keys.${key.name}`;
       const schemaName = physicalKey(mapping, key);
@@ -303,5 +314,19 @@ function optionAdditions(
     return null;
   return want.filter(
     (wanted) => !have.some((option) => option.value === wanted.value),
+  );
+}
+
+export function ownedColumnsOutsideModel(
+  mapping: DataverseMapping,
+  entity: Entity,
+  columns: readonly ObservedColumn[],
+): ObservedColumn[] {
+  return columns.filter(
+    (column) =>
+      column.name.startsWith(`${mapping.prefix}_`) &&
+      !entity.columns.some(
+        (wanted) => physicalColumn(mapping, entity, wanted) === column.name,
+      ),
   );
 }

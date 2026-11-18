@@ -39,10 +39,17 @@ export const model = parseModel({
   ],
 });
 
-export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
+export function schemaFixture({
+  lag = 0,
+  keyLag = lag,
+  indexLag = 0,
+  rows = {},
+  denied = [],
+} = {}) {
   const entities = new Map();
   const writes = [];
   const early = [];
+  const probes = [];
   const hidden = new Map();
   let time = 0;
   const clock = {
@@ -109,6 +116,27 @@ export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
           ),
         });
       }
+      const set = [...entities.values()].find(
+        (entity) => entity.metadata.EntitySetName === path,
+      );
+      if (set !== undefined) {
+        const filter = /^(\w+) ne null$/.exec(
+          url.searchParams.get("$filter") ?? "",
+        )?.[1];
+        probes.push(url.search);
+        if (denied.includes(filter))
+          return {
+            status: 403,
+            headers: {},
+            body: JSON.stringify({ error: { message: "Access denied." } }),
+          };
+        return response({
+          value: (rows[set.metadata.LogicalName] ?? [])
+            .filter((row) => row[filter] !== undefined && row[filter] !== null)
+            .slice(0, Number(url.searchParams.get("$top")))
+            .map(() => ({ [url.searchParams.get("$select")]: "row" })),
+        });
+      }
       if (path.endsWith("/Keys")) {
         const name = /LogicalName='([^']+)'/.exec(path)?.[1];
         const entity = entities.get(name);
@@ -161,6 +189,7 @@ export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
         const entity = {
           metadata: {
             LogicalName: body.SchemaName,
+            EntitySetName: `${body.SchemaName}s`,
             MetadataId: `metadata-${entities.size}`,
             PrimaryIdAttribute: `${body.SchemaName}id`,
             PrimaryNameAttribute: primary.SchemaName,
@@ -217,7 +246,7 @@ export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
     transport,
     clock,
   );
-  return { client, entities, writes, early, clock };
+  return { client, entities, writes, early, clock, probes };
 }
 
 function attribute(body) {
