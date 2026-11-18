@@ -16,7 +16,7 @@ source environment.
 1. Run read-only verification:
 
    ```sh
-   unverse transfer verify --env dev --manifest-file manifest.json --json
+   unverse pg verify --env dev --manifest-file manifest.json --format json
    ```
 
    Synthetic integration tests observed `verified: true` for matching data,

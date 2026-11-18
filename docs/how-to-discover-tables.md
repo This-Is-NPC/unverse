@@ -20,7 +20,7 @@ read the relevant metadata. Metadata visibility is not record access. The
 1. Search logical names:
 
    ```sh
-   unverse tables list --env dev --search account --json
+   unverse table list --env dev --search account --format json
    ```
 
    Synthetic metadata tests returned the logical name `account`, entity set

@@ -19,7 +19,7 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
 1. Apply with explicit confirmation:
 
    ```sh
-   unverse schema apply --env dev --plan-file plan.json --confirm --json
+   unverse schema apply --env dev --plan-file plan.json --confirm --format json
    ```
 
    Omitting `--confirm` fails before token acquisition. A foreign environment,

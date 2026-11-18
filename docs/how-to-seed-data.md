@@ -23,7 +23,7 @@ which may be empty. External references are not portable seed relationships.
 1. Save a preview. Paths below are placeholders:
 
    ```sh
-   unverse seed plan --env dev --seed-file seed.json --json > seed-plan.json
+   unverse seed plan --env dev --seed-file seed.json --format json > seed-plan.json
    ```
 
    The installed related fixture produced two proposed row creations. IDs
@@ -35,7 +35,7 @@ which may be empty. External references are not portable seed relationships.
    and `limitations`. Apply only the reviewed JSON:
 
    ```sh
-   unverse seed apply --env dev --plan-file seed-plan.json --confirm --json
+   unverse seed apply --env dev --plan-file seed-plan.json --confirm --format json
    ```
 
    The synthetic integration verified counts, IDs, relationships, and declared

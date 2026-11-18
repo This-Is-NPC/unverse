@@ -18,7 +18,7 @@ treated as an empty source, and a target failure is not a missing target item.
 1. Inspect masked variable configuration:
 
    ```sh
-   unverse variables list --env dev --json
+   unverse variable list --env dev --format json
    ```
 
    The installed fixture returned `fixture_endpoint`, `configured: true`,
@@ -29,7 +29,7 @@ treated as an empty source, and a target failure is not a missing target item.
 2. Compare the profiles:
 
    ```sh
-   unverse environment compare --env dev --target-env test --scope all --component-solution CommunityFixture --json
+   unverse env compare --env dev --target-env test --scope all --component-solution CommunityFixture --format json
    ```
 
    The solution name is also a placeholder. The fixture reported `equal: true`.

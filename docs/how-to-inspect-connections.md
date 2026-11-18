@@ -18,8 +18,8 @@ Dataverse metadata. This is not the complete Power Platform connector catalog.
 1. Find connector and reference metadata:
 
    ```sh
-   unverse connectors list --env dev --search example --json
-   unverse connection-references list --env dev --search example --json
+   unverse connector list --env dev --search example --format json
+   unverse connref list --env dev --search example --format json
    ```
 
    The installed synthetic fixture returned one custom connector and one
@@ -34,7 +34,7 @@ Dataverse metadata. This is not the complete Power Platform connector catalog.
 3. Inspect one reference; the GUID is a placeholder:
 
    ```sh
-   unverse connection-references inspect --env dev --reference-id 00000000-0000-0000-0000-000000000101 --json
+   unverse connref show 00000000-0000-0000-0000-000000000101 --env dev --format json
    ```
 
    The fixture reported logical name `uv_example_reference`, a connector API

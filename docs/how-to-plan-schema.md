@@ -17,7 +17,7 @@ supported types and a 1:N relationship. See
 1. Save a reviewable plan. File paths, prefix, and solution below are placeholders:
 
    ```sh
-   unverse schema plan --env dev --prefix uv --solution UnverseFixture --model-file schema.json --json > plan.json
+   unverse schema plan --env dev --prefix uv --solution UnverseFixture --model-file schema.json --format json > plan.json
    ```
 
    The installed fixture produced two `create-entity` operations and no blocks.

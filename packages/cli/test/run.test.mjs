@@ -28,6 +28,7 @@ import {
   schemaFixture,
   model as schemaModel,
 } from "../../dataverse/test/fixtures/schema.mjs";
+import { renderCliReference } from "../dist/help.js";
 import { runCli } from "../dist/run.js";
 
 const validConfig = JSON.stringify({
@@ -45,7 +46,7 @@ const validConfig = JSON.stringify({
 test("requires an environment before reading configuration", async () => {
   let reads = 0;
   const result = await runCli(
-    ["config", "validate"],
+    ["config", "check"],
     runtime(() => {
       reads += 1;
       return validConfig;
@@ -59,7 +60,7 @@ test("reports the selected normalized environment in one JSON document", async (
   const output = [];
   const errors = [];
   const result = await runCli(
-    ["config", "validate", "--env", "dev", "--json"],
+    ["config", "check", "--env", "dev", "--format", "json"],
     runtime(() => validConfig, output, errors),
   );
   assert.equal(result, 0);
@@ -74,7 +75,7 @@ test("redacts secrets from JSON errors", async () => {
   const output = [];
   const errors = [];
   const result = await runCli(
-    ["config", "validate", "--env", "dev", "--json"],
+    ["config", "check", "--env", "dev", "--format", "json"],
     runtime(
       () => {
         throw new Error("Unable to read top-secret");
@@ -93,7 +94,7 @@ test("redacts secrets from JSON errors", async () => {
 test("reports the application user returned by whoami", async () => {
   const output = [];
   const result = await runCli(
-    ["whoami", "--env", "dev", "--json"],
+    ["env", "whoami", "--env", "dev", "--format", "json"],
     runtime(
       () => validConfig,
       output,
@@ -113,7 +114,7 @@ test("reports the application user returned by whoami", async () => {
 test("preserves permission failures from whoami", async () => {
   const output = [];
   const result = await runCli(
-    ["whoami", "--env", "dev", "--json"],
+    ["env", "whoami", "--env", "dev", "--format", "json"],
     runtime(
       () => validConfig,
       output,
@@ -125,14 +126,14 @@ test("preserves permission failures from whoami", async () => {
     ),
   );
   assert.equal(result, 4);
-  assert.equal(JSON.parse(output[0]).command, "whoami");
+  assert.equal(JSON.parse(output[0]).command, "env whoami");
   assert.equal(JSON.parse(output[0]).environment.name, "dev");
 });
 
 test("doctor reports its limited probe coverage", async () => {
   const output = [];
   const result = await runCli(
-    ["doctor", "--env", "dev", "--json"],
+    ["env", "doctor", "--env", "dev", "--format", "json"],
     runtime(
       () => validConfig,
       output,
@@ -147,7 +148,7 @@ test("doctor reports its limited probe coverage", async () => {
   );
   assert.equal(result, 0);
   const document = JSON.parse(output[0]);
-  assert.equal(document.command, "doctor");
+  assert.equal(document.command, "env doctor");
   assert.equal(document.data.checks.length, 3);
   assert.match(document.coverage.limitations[0], /Only WhoAmI/);
 });
@@ -155,7 +156,7 @@ test("doctor reports its limited probe coverage", async () => {
 test("invalid profiles prevent token acquisition", async () => {
   let calls = 0;
   const result = await runCli(
-    ["whoami", "--env", "dev", "--json"],
+    ["env", "whoami", "--env", "dev", "--format", "json"],
     runtime(
       () => validConfig.replace('"configVersion":1', '"configVersion":2'),
       [],
@@ -174,7 +175,7 @@ test("invalid profiles prevent token acquisition", async () => {
 test("doctor preserves authentication failure and skips the API probe", async () => {
   const output = [];
   const result = await runCli(
-    ["doctor", "--env", "dev", "--json"],
+    ["env", "doctor", "--env", "dev", "--format", "json"],
     runtime(
       () => validConfig,
       output,
@@ -189,11 +190,11 @@ test("doctor preserves authentication failure and skips the API probe", async ()
   assert.equal(JSON.parse(output[0]).data.checks[2].status, "not-run");
 });
 
-test("JSON parse errors remain JSON even when --json follows the bad option", async () => {
+test("JSON parse errors remain JSON even when --format json follows the bad flag", async () => {
   const output = [];
   assert.equal(
     await runCli(
-      ["whoami", "--bad", "--json"],
+      ["env", "whoami", "--bad", "--format", "json"],
       runtime(() => validConfig, output),
     ),
     2,
@@ -223,12 +224,13 @@ test("failed role expectation differs from an informational empty list", async (
     "dev",
     "--email",
     "synthetic@example.invalid",
-    "--json",
+    "--format",
+    "json",
   ];
-  assert.equal(await runCli(["user", "roles", ...userArguments], base), 0);
+  assert.equal(await runCli(["user", "show", ...userArguments], base), 0);
   assert.equal(
     await runCli(
-      ["check", "role", ...userArguments, "--role-id", roleId],
+      ["role", "check", ...userArguments, "--role-id", roleId],
       base,
     ),
     1,
@@ -240,15 +242,16 @@ test("denied team reads cannot make a missing-role check fail", async () => {
   const output = [];
   const result = await runCli(
     [
-      "check",
       "role",
+      "check",
       "--env",
       "dev",
       "--email",
       "synthetic@example.invalid",
       "--role-id",
       otherRoleId,
-      "--json",
+      "--format",
+      "json",
     ],
     {
       ...runtime(() => validConfig, output),
@@ -263,16 +266,17 @@ test("capped CLI queries return inconclusive coverage and exit seven", async () 
   const output = [];
   const result = await runCli(
     [
+      "record",
       "query",
+      "account",
       "--env",
       "dev",
-      "--table",
-      "account",
       "--select",
       "name",
       "--limit",
       "1",
-      "--json",
+      "--format",
+      "json",
     ],
     {
       ...runtime(() => validConfig, output),
@@ -311,7 +315,8 @@ test("CLI schema planning and confirmed apply share the result contract", async 
         "UnverseFixture",
         "--model-file",
         "model.json",
-        "--json",
+        "--format",
+        "json",
       ],
       base,
     ),
@@ -329,7 +334,8 @@ test("CLI schema planning and confirmed apply share the result contract", async 
         "--plan-file",
         "plan.json",
         "--confirm",
-        "--json",
+        "--format",
+        "json",
       ],
       base,
     ),
@@ -341,7 +347,16 @@ test("CLI schema planning and confirmed apply share the result contract", async 
 test("CLI schema apply without confirmation does not request a token", async () => {
   let calls = 0;
   const result = await runCli(
-    ["schema", "apply", "--env", "dev", "--plan-file", "plan.json", "--json"],
+    [
+      "schema",
+      "apply",
+      "--env",
+      "dev",
+      "--plan-file",
+      "plan.json",
+      "--format",
+      "json",
+    ],
     {
       ...runtime(() => validConfig),
       readFile: async (path) =>
@@ -361,13 +376,14 @@ test("CLI transfer import requires confirmation before connecting", async () => 
   let connections = 0;
   const result = await runCli(
     [
-      "transfer",
+      "pg",
       "import",
       "--env",
       "dev",
       "--manifest-file",
       "manifest.json",
-      "--json",
+      "--format",
+      "json",
     ],
     {
       ...runtime(() => validConfig),
@@ -401,13 +417,14 @@ test("CLI transfer verification uses PostgreSQL without requesting a Dataverse t
   let tokens = 0;
   const result = await runCli(
     [
-      "transfer",
+      "pg",
       "verify",
       "--env",
       "dev",
       "--manifest-file",
       "manifest.json",
-      "--json",
+      "--format",
+      "json",
     ],
     {
       ...runtime(() => validConfig, output),
@@ -449,10 +466,13 @@ test("CLI role convenience resolves the authenticated caller", async () => {
   });
   const output = [];
   assert.equal(
-    await runCli(["user", "roles", "--env", "dev", "--caller", "--json"], {
-      ...runtime(() => validConfig, output),
-      connect: () => client,
-    }),
+    await runCli(
+      ["user", "show", "--env", "dev", "--caller", "--format", "json"],
+      {
+        ...runtime(() => validConfig, output),
+        connect: () => client,
+      },
+    ),
     0,
   );
   assert.match(
@@ -462,14 +482,17 @@ test("CLI role convenience resolves the authenticated caller", async () => {
   assert.equal(JSON.parse(output[0]).data.roles.length, 1);
 });
 
-test("CLI rejects conflicting output formats before connecting", async () => {
+test("CLI rejects a format the command does not offer before connecting", async () => {
   let reads = 0;
-  const code = await runCli(["whoami", "--env", "dev", "--json", "--csv"], {
-    ...runtime(() => {
-      reads += 1;
-      return validConfig;
-    }),
-  });
+  const code = await runCli(
+    ["env", "whoami", "--env", "dev", "--format", "html"],
+    {
+      ...runtime(() => {
+        reads += 1;
+        return validConfig;
+      }),
+    },
+  );
   assert.equal(code, 2);
   assert.equal(reads, 0);
 });
@@ -491,7 +514,7 @@ test("CLI dependency impact returns paths and graph exports stay standalone", as
     connect: () => fixture.client,
   };
   const args = [
-    "dependencies",
+    "deps",
     "impact",
     "--env",
     "dev",
@@ -500,14 +523,14 @@ test("CLI dependency impact returns paths and graph exports stay standalone", as
     "--depth",
     "6",
   ];
-  assert.equal(await runCli([...args, "--json"], context), 0);
+  assert.equal(await runCli([...args, "--format", "json"], context), 0);
   assert.equal(JSON.parse(output[0]).data.analysis.affected.length, 4);
-  assert.equal(await runCli([...args, "--html"], context), 0);
+  assert.equal(await runCli([...args, "--format=html"], context), 0);
   assert.match(output[1], /^<!doctype html>/);
   assert.ok(output[1].includes('id="canvas"'));
   assert.match(output[1], /script-src 'sha256-[A-Za-z0-9+/=]+'/);
   assert.ok(!/<script[^>]+src=/.test(output[1]));
-  assert.equal(await runCli([...args, "--svg"], context), 0);
+  assert.equal(await runCli([...args, "--format", "svg"], context), 0);
   assert.match(output[2], /^<svg [^>]*class="pele pele-flowchart"/);
 });
 
@@ -521,13 +544,14 @@ test("CLI partial dependency graphs exit seven and show coverage warnings", asyn
   assert.equal(
     await runCli(
       [
-        "dependencies",
+        "deps",
         "graph",
         "--env",
         "dev",
         "--reference-id",
         referenceId,
-        "--mermaid",
+        "--format",
+        "mermaid",
       ],
       context,
     ),
@@ -591,11 +615,11 @@ function pinnedRuntime(config, organizations, requests, output = []) {
   };
 }
 
-test("config validate rejects a malformed expected organization without contacting Dataverse", async () => {
+test("config check rejects a malformed expected organization without contacting Dataverse", async () => {
   const requests = [];
   const output = [];
   const result = await runCli(
-    ["config", "validate", "--env", "dev", "--json"],
+    ["config", "check", "--env", "dev", "--format", "json"],
     pinnedRuntime(pinnedConfig("not-a-guid"), {}, requests, output),
   );
   assert.equal(result, 2);
@@ -603,12 +627,12 @@ test("config validate rejects a malformed expected organization without contacti
   assert.match(JSON.parse(output[0]).error.message, /expectedOrganizationId/);
 });
 
-test("whoami and doctor report a matching expected organization as evidence", async () => {
+test("env whoami and env doctor report a matching expected organization as evidence", async () => {
   for (const command of ["whoami", "doctor"]) {
     const requests = [];
     const output = [];
     const result = await runCli(
-      [command, "--env", "dev", "--json"],
+      ["env", command, "--env", "dev", "--format", "json"],
       pinnedRuntime(
         pinnedConfig(pinnedOrganization),
         { dev: pinnedOrganization },
@@ -629,7 +653,7 @@ test("whoami and doctor report a matching expected organization as evidence", as
 test("a profile without an expected organization adds no match evidence", async () => {
   const output = [];
   await runCli(
-    ["whoami", "--env", "dev", "--json"],
+    ["env", "whoami", "--env", "dev", "--format", "json"],
     pinnedRuntime(pinnedConfig(), { dev: otherOrganization }, [], output),
   );
   assert.deepEqual(JSON.parse(output[0]).evidence, [
@@ -641,7 +665,7 @@ test("an organization mismatch exits two after WhoAmI and before any other reque
   const requests = [];
   const output = [];
   const result = await runCli(
-    ["tables", "list", "--env", "dev", "--json"],
+    ["table", "list", "--env", "dev", "--format", "json"],
     pinnedRuntime(
       pinnedConfig(pinnedOrganization),
       { dev: otherOrganization },
@@ -661,7 +685,7 @@ test("an organization mismatch exits two after WhoAmI and before any other reque
 test("doctor reports an organization mismatch as a failed WhoAmI after a token", async () => {
   const output = [];
   const result = await runCli(
-    ["doctor", "--env", "dev", "--json"],
+    ["env", "doctor", "--env", "dev", "--format", "json"],
     pinnedRuntime(
       pinnedConfig(pinnedOrganization),
       { dev: otherOrganization },
@@ -685,13 +709,14 @@ test("doctor reports an organization mismatch as a failed WhoAmI after a token",
 
 test("environment compare checks the source and the target profile", async () => {
   const compare = [
-    "environment",
+    "env",
     "compare",
     "--env",
     "dev",
     "--target-env",
     "test",
-    "--json",
+    "--format",
+    "json",
   ];
   const sourceRequests = [];
   assert.equal(
@@ -722,4 +747,334 @@ test("environment compare checks the source and the target profile", async () =>
     "dev.crm.dynamics.com/WhoAmI",
     "test.crm.dynamics.com/WhoAmI",
   ]);
+});
+
+const twoEnvironments = JSON.stringify({
+  configVersion: 1,
+  environments: {
+    dev: {
+      url: "https://dev.crm.dynamics.com/",
+      tenantIdEnv: "SECRET_TENANT_NAME",
+      clientIdEnv: "SECRET_CLIENT_NAME",
+      clientSecretEnv: "SECRET_VALUE_NAME",
+    },
+    prod: {
+      url: "https://prod.crm.dynamics.com",
+      tenantIdEnv: "SECRET_TENANT_NAME",
+      clientIdEnv: "SECRET_CLIENT_NAME",
+      clientSecretEnv: "SECRET_VALUE_NAME",
+    },
+  },
+});
+
+async function rejected(args, pattern) {
+  const output = [];
+  const errors = [];
+  let connections = 0;
+  const code = await runCli(args, {
+    ...runtime(() => validConfig, output, errors),
+    connect: () => {
+      connections += 1;
+    },
+  });
+  assert.equal(code, 2, args.join(" "));
+  assert.equal(connections, 0);
+  assert.deepEqual(output, []);
+  assert.match(errors.join(""), pattern);
+}
+
+async function queried(args) {
+  const output = [];
+  const code = await runCli(args, {
+    ...runtime(() => validConfig, output),
+    connect: () => queryFixture().client,
+  });
+  return { code, output };
+}
+
+test("flag values bind with an equals sign or as the next token", async () => {
+  const { code, output } = await queried([
+    "record",
+    "query",
+    "account",
+    "--env=dev",
+    "--select=name",
+    "--limit=1",
+    "--format=json",
+  ]);
+  assert.equal(code, 7);
+  assert.equal(JSON.parse(output[0]).data.rows.length, 1);
+});
+
+test("an empty attached value is bound and then validated", async () => {
+  await rejected(
+    ["env", "whoami", "--env", "dev", "--format="],
+    /--format must be one of/,
+  );
+});
+
+test("a double dash ends flag parsing", async () => {
+  const { code, output } = await queried([
+    "record",
+    "query",
+    "--env",
+    "dev",
+    "--select",
+    "name",
+    "--format",
+    "json",
+    "--",
+    "account",
+  ]);
+  assert.equal(code, 0);
+  assert.equal(JSON.parse(output[0]).status, "ok");
+  await rejected(
+    ["record", "query", "--env", "dev", "--", "account", "--select", "name"],
+    /Unexpected argument --select\./,
+  );
+});
+
+test("help flags print help without reading configuration", async () => {
+  for (const flag of ["-h", "--help"]) {
+    const output = [];
+    const errors = [];
+    let reads = 0;
+    const code = await runCli(["role", "check", flag], {
+      ...runtime(
+        () => {
+          reads += 1;
+          return validConfig;
+        },
+        output,
+        errors,
+      ),
+    });
+    assert.equal(code, 0);
+    assert.equal(reads, 0);
+    assert.deepEqual(errors, []);
+    assert.match(output[0], /^unverse role check /);
+    assert.match(output[0], /Select exactly one of --role-id or --role\./);
+  }
+});
+
+test("a bare group prints group help to stderr and exits two", async () => {
+  const output = [];
+  const errors = [];
+  assert.equal(
+    await runCli(
+      ["table"],
+      runtime(() => validConfig, output, errors),
+    ),
+    2,
+  );
+  assert.deepEqual(output, []);
+  assert.match(errors[0], /^unverse table — /);
+  assert.match(errors[0], /unverse table list {2}read /);
+  const requested = [];
+  assert.equal(
+    await runCli(
+      ["table", "--help"],
+      runtime(() => validConfig, requested),
+    ),
+    0,
+  );
+  assert.equal(requested[0], errors[0]);
+});
+
+test("an exactly-one-of group rejects none and several of its flags", async () => {
+  const selector =
+    /Select exactly one of --user-id, --email, --domain, --name, or --caller\./;
+  await rejected(["user", "show", "--env", "dev"], selector);
+  await rejected(
+    [
+      "user",
+      "show",
+      "--env",
+      "dev",
+      "--email",
+      "a@example.invalid",
+      "--caller",
+    ],
+    selector,
+  );
+  await rejected(
+    ["role", "check", "--env", "dev", "--caller"],
+    /Select exactly one of --role-id or --role\./,
+  );
+  await rejected(
+    [
+      "role",
+      "check",
+      "--env",
+      "dev",
+      "--caller",
+      "--role-id",
+      roleId,
+      "--role",
+      "x",
+    ],
+    /Select exactly one of --role-id or --role\./,
+  );
+});
+
+test("format values are limited to those the command offers", async () => {
+  await rejected(
+    ["env", "whoami", "--env", "dev", "--format", "html"],
+    /--format must be one of human, json, csv\./,
+  );
+  await rejected(
+    [
+      "deps",
+      "graph",
+      "--env",
+      "dev",
+      "--reference-id",
+      referenceId,
+      "--format",
+      "xml",
+    ],
+    /--format must be one of human, json, csv, html, mermaid, svg\./,
+  );
+  await rejected(
+    ["app", "list", "--env", "dev", "--kind", "other"],
+    /--kind must be one of all, canvas, model-driven\./,
+  );
+});
+
+test("flags are exact, known, valid for the command, and given once", async () => {
+  await rejected(
+    ["env", "whoami", "--env", "dev", "--bad"],
+    /Unknown flag --bad\./,
+  );
+  await rejected(["env", "whoami", "--env", "dev", "-x"], /Unknown flag -x\./);
+  await rejected(["env", "whoami", "--en", "dev"], /Unknown flag --en\./);
+  await rejected(
+    ["env", "whoami", "--env", "dev", "--search", "a"],
+    /Flag --search is not valid for env whoami\./,
+  );
+  await rejected(
+    ["env", "whoami", "--env", "dev", "--env", "prod"],
+    /Duplicate flag --env\./,
+  );
+  await rejected(["env", "whoami", "--env"], /--env requires a value\./);
+  await rejected(
+    ["env", "whoami", "--env", "--format"],
+    /--env requires a value\./,
+  );
+  await rejected(
+    [
+      "schema",
+      "apply",
+      "--env",
+      "dev",
+      "--plan-file",
+      "p.json",
+      "--confirm=yes",
+    ],
+    /--confirm does not take a value\./,
+  );
+  await rejected(["env", "whoami"], /--env is required\./);
+  await rejected(
+    ["schema", "apply", "--env", "dev", "--plan-file", "p.json"],
+    /--confirm is required\./,
+  );
+});
+
+test("commands are exact and positionals are counted", async () => {
+  await rejected(
+    ["tables", "list", "--env", "dev"],
+    /Unknown command tables\./,
+  );
+  await rejected(
+    ["table", "lst", "--env", "dev"],
+    /Unknown command table lst\./,
+  );
+  await rejected(
+    ["--env", "dev", "table", "list"],
+    /Expected a command before --env\./,
+  );
+  await rejected(
+    ["record", "query", "--env", "dev", "--select", "name"],
+    /<table> is required\./,
+  );
+  await rejected(
+    [
+      "record",
+      "query",
+      "account",
+      "contact",
+      "--env",
+      "dev",
+      "--select",
+      "name",
+    ],
+    /Unexpected argument contact\./,
+  );
+  await rejected(
+    ["table", "list", "extra", "--env", "dev"],
+    /Unexpected argument extra\./,
+  );
+});
+
+test("env list shows names and URLs offline without secrets", async () => {
+  const output = [];
+  let connections = 0;
+  const code = await runCli(["env", "list", "--format", "json"], {
+    ...runtime(() => twoEnvironments, output),
+    connect: () => {
+      connections += 1;
+    },
+  });
+  assert.equal(code, 0);
+  assert.equal(connections, 0);
+  const document = JSON.parse(output[0]);
+  assert.equal(document.command, "env list");
+  assert.deepEqual(document.data.environments, [
+    { name: "dev", url: "https://dev.crm.dynamics.com" },
+    { name: "prod", url: "https://prod.crm.dynamics.com" },
+  ]);
+  assert.doesNotMatch(output[0], /SECRET/);
+});
+
+test("every command declares its effect in help, the reference, and the spec", async () => {
+  const output = [];
+  assert.equal(
+    await runCli(
+      ["spec", "--format", "json"],
+      runtime(() => validConfig, output),
+    ),
+    0,
+  );
+  const document = JSON.parse(output[0]);
+  const effects = Object.fromEntries(
+    document.commands.map((command) => [command.path, command.effect]),
+  );
+  assert.equal(effects["schema apply"], "write");
+  assert.equal(effects["pg import"], "write");
+  assert.equal(effects["table list"], "read");
+  assert.equal(effects.spec, "read");
+  const help = [];
+  await runCli(
+    ["--help"],
+    runtime(() => validConfig, help),
+  );
+  const reference = renderCliReference();
+  for (const command of document.commands) {
+    assert.ok(["read", "write", "destructive"].includes(command.effect));
+    assert.match(
+      help[0],
+      new RegExp(`^ {2}${command.path} +${command.effect} `, "m"),
+    );
+    assert.ok(
+      reference.includes(
+        `## ${command.path}\n\n${command.summary}\n\n- Effect: \`${command.effect}\``,
+      ),
+      command.path,
+    );
+    const names = command.flags.map((flag) => flag.name);
+    assert.equal(new Set(names).size, names.length);
+    assert.equal(names.includes("--confirm"), command.effect !== "read");
+    for (const group of command.groups)
+      for (const name of group.flags) assert.ok(names.includes(name));
+  }
 });

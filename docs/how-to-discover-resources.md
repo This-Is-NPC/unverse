@@ -17,8 +17,8 @@ transactional snapshot or a proof that the caller can see everything.
 1. Find solutions and inspect their membership:
 
    ```sh
-   unverse solutions list --env dev --search fixture --json
-   unverse solution components --env dev --solution-id 00000000-0000-0000-0000-000000000011 --json
+   unverse solution list --env dev --search fixture --format json
+   unverse solution show 00000000-0000-0000-0000-000000000011 --env dev --format json
    ```
 
    The GUID is a placeholder. The installed fixture returned `CommunityFixture`
@@ -29,9 +29,9 @@ transactional snapshot or a proof that the caller can see everything.
 2. Find apps and flows:
 
    ```sh
-   unverse apps list --env dev --search synthetic --json
-   unverse apps list --env dev --kind model-driven --json
-   unverse flows list --env dev --search synthetic --json
+   unverse app list --env dev --search synthetic --format json
+   unverse app list --env dev --kind model-driven --format json
+   unverse flow list --env dev --search synthetic --format json
    ```
 
    The fixture returned one canvas app, one model-driven app, and one cloud
@@ -43,7 +43,7 @@ transactional snapshot or a proof that the caller can see everything.
 3. Find a table by logical name, displayed label, or entity set:
 
    ```sh
-   unverse tables list --env dev --search accounts --json
+   unverse table list --env dev --search accounts --format json
    ```
 
    The fixture resolves `accounts` to logical table `account`. Continue with
@@ -52,9 +52,9 @@ transactional snapshot or a proof that the caller can see everything.
 4. Resolve a user before investigating roles:
 
    ```sh
-   unverse users list --env dev --search synthetic --json
-   unverse user roles --env dev --name "Synthetic User" --json
-   unverse user roles --env dev --caller --json
+   unverse user list --env dev --search synthetic --format json
+   unverse user show --env dev --name "Synthetic User" --format json
+   unverse user show --env dev --caller --format json
    ```
 
    The fixture returned one deduplicated role with direct and team sources.

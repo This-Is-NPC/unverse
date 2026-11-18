@@ -45,30 +45,36 @@ probe, not for validating table or record permissions.
 3. Validate the profile without acquiring a token:
 
    ```sh
-   unverse config validate --env dev --json
+   unverse config check --env dev --format json
    ```
 
    Offline tests observed a single JSON document with `status: "ok"`,
    `data.configVersion: 1`, and the normalized selected environment. This
    checks references and URL syntax, not credential values or reachability.
 
+   To see which profiles a configuration file defines, run `unverse env list`.
+   It reads only the file. Run against the synthetic fixture configuration, it
+   returned `data.environments` as
+   `[{"name":"test","url":"https://synthetic-test.crm.dynamics.com"},{"name":"dev","url":"https://synthetic.crm.dynamics.com"}]`.
+   Credential variable names are not printed.
+
 4. Run the opt-in read-only identity probe against your selected environment:
 
    ```sh
-   unverse whoami --env dev --json
-   unverse doctor --env dev --json
+   unverse env whoami --env dev --format json
+   unverse env doctor --env dev --format json
    ```
 
    The authorized DEV check observed WhoAmI organization, user, and
    business-unit IDs without logging their values. Synthetic tests verify
    that these IDs populate the result.
-   `doctor` uses the same WhoAmI operation and reports its limited coverage.
+   `env doctor` uses the same WhoAmI operation and reports its limited coverage.
    A successful probe proves only that the selected application user can
    complete WhoAmI; it does not establish privileges for other commands.
 
 5. Pin the profile to its organization, so a swapped or edited
    configuration cannot reach another environment. Read `organizationId` from
-   the `whoami` output (the IDs below are synthetic):
+   the `env whoami` output (the IDs below are synthetic):
 
    ```json
    "data": {
@@ -80,10 +86,10 @@ probe, not for validating table or record permissions.
 
    Copy that value, in lowercase, into the profile as
    `"expectedOrganizationId": "0a1b2c3d-1111-4222-8333-444455556666"`.
-   `config validate` rejects a value that is not a lowercase GUID, without
+   `config check` rejects a value that is not a lowercase GUID, without
    contacting Dataverse. From then on every command that contacts the
    environment first checks that WhoAmI returns this organization, and
-   `whoami` and `doctor` add the match to `evidence`:
+   `env whoami` and `env doctor` add the match to `evidence`:
 
    ```text
    Organization 0a1b2c3d-1111-4222-8333-444455556666 matches expectedOrganizationId 0a1b2c3d-1111-4222-8333-444455556666.
@@ -107,7 +113,7 @@ probe, not for validating table or record permissions.
 Invalid profiles and an organization that differs from
 `expectedOrganizationId` exit 2, authentication failures exit 3, denied requests exit
 4, and service or exhausted transport failures exit 5. Inspect `error.code`
-and `coverage` in JSON. A failed doctor probe marks later checks as not run
+and `coverage` in JSON. A failed `env doctor` probe marks later checks as not run
 or unknown, rather than successful. No table, role, or record privilege is
 inferred from WhoAmI.
 

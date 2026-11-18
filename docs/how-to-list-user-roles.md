@@ -23,7 +23,7 @@ these reads are permitted. The email below is a synthetic placeholder.
 1. Select exactly one of `--email`, `--domain`, or `--user-id`:
 
    ```sh
-   unverse user roles --env dev --email synthetic@example.invalid --json
+   unverse user show --env dev --email synthetic@example.invalid --format json
    ```
 
    The authorized DEV check completed the caller's investigation with one

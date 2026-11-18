@@ -49,15 +49,10 @@ import {
   variables,
 } from "@unverse/dataverse";
 import type { PostgresStore } from "@unverse/postgres";
-import {
-  type CommandName,
-  commandDefinitions,
-  commandOptions,
-  optionDefinitions,
-  optionRequired,
-  renderHelp,
-} from "./commands.js";
+import { InputError, parseInvocation, requestsJson } from "./arguments.js";
+import type { Format } from "./commands.js";
 import { renderCsv } from "./csv.js";
+import { specDocument } from "./help.js";
 
 export interface CliRuntime {
   readonly readFile: (path: string) => Promise<string>;
@@ -72,70 +67,70 @@ export interface CliRuntime {
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
 }
 
-interface ParsedArguments {
-  readonly command: CommandName;
-  readonly configPath: string;
-  readonly environmentName: string;
-  readonly options: ReadonlyMap<string, string>;
-}
-
-class InputError extends Error {}
-
 export async function runCli(
   argv: readonly string[],
   runtime: CliRuntime,
 ): Promise<number> {
-  const json = argv.includes("--json");
-  if (argv.length === 0 || argv.includes("--help")) {
-    runtime.writeOut(renderHelp());
-    return 0;
-  }
   let command: string = "unknown";
   let environment: EnvironmentEvidence | undefined;
   let stage: "configuration" | "token and WhoAmI" = "configuration";
+  let format: Format = requestsJson(argv) ? "json" : "human";
   try {
-    const formats = ["--json", "--csv", "--html", "--mermaid", "--svg"].filter(
-      (flag) => argv.includes(flag),
-    );
-    if (formats.length > 1)
-      throw new InputError(
-        "Choose one output format: --json, --csv, --html, --mermaid, or --svg.",
-      );
-    if (formats.length && formats[0] !== "--json") {
-      const original = runtime;
-      runtime = {
-        ...original,
-        writeOut: (line) => {
-          const result = JSON.parse(line) as Result<unknown>;
-          if (result.status === "error") original.writeError(line);
-          else if (argv.includes("--csv")) original.writeOut(renderCsv(result));
-          else {
-            const graph = record(result.data).graph as DependencyGraph;
-            original.writeOut(
-              argv.includes("--html")
-                ? dependencyHtml(graph)
-                : argv.includes("--svg")
-                  ? dependencySvg(graph)
-                  : dependencyMermaid(graph),
-            );
-          }
-        },
-      };
+    const parsed = parseInvocation(argv);
+    if (parsed.kind === "help") {
+      if (parsed.requested) runtime.writeOut(parsed.text);
+      else runtime.writeError(parsed.text);
+      return parsed.requested ? 0 : 2;
     }
-    const parsed = parseArguments(argv);
-    command = parsed.command;
+    const { flags, positionals } = parsed;
+    command = parsed.route.path;
+    format = parsed.format;
+    if (command === "spec") {
+      runtime.writeOut(
+        `${JSON.stringify(specDocument(), null, format === "json" ? undefined : 2)}\n`,
+      );
+      return 0;
+    }
     const config = parseConfig(
-      JSON.parse(await runtime.readFile(parsed.configPath)),
+      JSON.parse(
+        await runtime.readFile(flags.get("--config") ?? "unverse.config.json"),
+      ),
     );
-    const profile = selectEnvironment(config, parsed.environmentName);
-    environment = { name: parsed.environmentName, url: profile.url };
+    if (command === "env list")
+      return emit(
+        {
+          outputVersion,
+          command,
+          timestamp: runtime.now(),
+          status: "ok",
+          data: {
+            environments: Object.entries(config.environments).map(
+              ([name, { url }]) => ({ name, url }),
+            ),
+          },
+          evidence: [
+            "Configuration schema and every environment profile are valid.",
+          ],
+          coverage: {
+            complete: true,
+            limitations: [
+              "Credential values and Dataverse reachability were not checked.",
+            ],
+          },
+        },
+        format,
+        runtime,
+      );
+    const environmentName = flags.get("--env") ?? "";
+    const profile = selectEnvironment(config, environmentName);
+    environment = { name: environmentName, url: profile.url };
     const base = {
       outputVersion,
       command,
       timestamp: runtime.now(),
       environment,
     } as const;
-    if (parsed.command === "config validate") {
+    if (command === "config check") {
       return emit(
         {
           ...base,
@@ -151,30 +146,20 @@ export async function runCli(
             ],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
-    if (
-      parsed.command === "transfer import" ||
-      parsed.command === "transfer verify"
-    ) {
-      if (
-        parsed.command === "transfer import" &&
-        !parsed.options.has("--confirm")
-      )
-        throw new InputError("Transfer import requires explicit --confirm.");
+    if (command === "pg import" || command === "pg verify") {
       const input = record(
-        JSON.parse(
-          await runtime.readFile(parsed.options.get("--manifest-file") ?? ""),
-        ),
+        JSON.parse(await runtime.readFile(flags.get("--manifest-file") ?? "")),
       );
       const manifest = await parseManifest(
         input.outputVersion === outputVersion ? input.data : input,
       );
       if (
         manifest.source.environment.url !== profile.url ||
-        manifest.source.environment.name !== parsed.environmentName
+        manifest.source.environment.name !== environmentName
       )
         throw new InputError(
           "The manifest belongs to a different source environment profile.",
@@ -190,7 +175,7 @@ export async function runCli(
       const store = runtime.connectPostgres(profile.postgres);
       try {
         const report =
-          parsed.command === "transfer import"
+          command === "pg import"
             ? await store.import(manifest, true)
             : await store.verify(manifest);
         return emit(
@@ -203,7 +188,7 @@ export async function runCli(
             ],
             coverage: { complete: true, limitations: report.limitations },
           },
-          json,
+          format,
           runtime,
         );
       } finally {
@@ -211,61 +196,37 @@ export async function runCli(
       }
     }
     stage = "token and WhoAmI";
-    const selector =
-      parsed.command === "user roles" || parsed.command === "check role"
-        ? userSelector(parsed.options)
-        : undefined;
-    if (
-      parsed.command === "check role" &&
-      Number(parsed.options.has("--role-id")) +
-        Number(parsed.options.has("--role")) !==
-        1
-    )
-      throw new InputError("Select exactly one of --role-id or --role.");
     if (runtime.connect === undefined)
       throw new DataverseError(
         "unsupported",
         "Dataverse operations are unavailable in this runtime.",
       );
-    const client = runtime.connect(profile, parsed.environmentName);
-    if (
-      ["seed apply", "transfer apply"].includes(parsed.command) &&
-      !parsed.options.has("--confirm")
-    )
-      throw new InputError("Data apply requires explicit --confirm.");
+    const client = runtime.connect(profile, environmentName);
     const mapping =
-      parsed.command === "schema inspect" ||
-      parsed.command === "schema plan" ||
-      parsed.command === "transfer export"
+      command === "schema inspect" ||
+      command === "schema plan" ||
+      command === "pg export"
         ? parseMapping({
-            prefix: parsed.options.get("--prefix"),
-            solution: parsed.options.get("--solution"),
+            prefix: flags.get("--prefix"),
+            solution: flags.get("--solution"),
           })
         : undefined;
     const model =
-      parsed.command === "schema plan" || parsed.command === "transfer export"
+      command === "schema plan" || command === "pg export"
         ? parseModel(
-            JSON.parse(
-              await runtime.readFile(parsed.options.get("--model-file") ?? ""),
-            ),
+            JSON.parse(await runtime.readFile(flags.get("--model-file") ?? "")),
           )
         : undefined;
     const inputPlan =
-      parsed.command === "schema apply"
+      command === "schema apply"
         ? record(
-            JSON.parse(
-              await runtime.readFile(parsed.options.get("--plan-file") ?? ""),
-            ),
+            JSON.parse(await runtime.readFile(flags.get("--plan-file") ?? "")),
           )
         : undefined;
-    if (inputPlan !== undefined && !parsed.options.has("--confirm"))
-      throw new InputError("schema apply requires explicit --confirm.");
     const identity = await client.whoAmI();
-    if (parsed.command.startsWith("dependencies ")) {
+    if (command.startsWith("deps ")) {
       const numeric = (flag: string) =>
-        parsed.options.has(flag)
-          ? { [flag]: Number(parsed.options.get(flag)) }
-          : {};
+        flags.has(flag) ? { [flag]: Number(flags.get(flag)) } : {};
       const values = {
         ...numeric("--component-type"),
         ...numeric("--depth"),
@@ -274,27 +235,27 @@ export async function runCli(
         ...numeric("--max-queries"),
       };
       const options: DependencyOptions = {
-        ...(parsed.options.has("--object-id")
-          ? { objectId: parsed.options.get("--object-id") ?? "" }
+        ...(flags.has("--object-id")
+          ? { objectId: flags.get("--object-id") ?? "" }
           : {}),
-        ...(parsed.options.has("--component-type")
+        ...(flags.has("--component-type")
           ? { componentType: values["--component-type"] as number }
           : {}),
-        ...(parsed.options.has("--reference-id")
-          ? { referenceId: parsed.options.get("--reference-id") ?? "" }
+        ...(flags.has("--reference-id")
+          ? { referenceId: flags.get("--reference-id") ?? "" }
           : {}),
-        ...(parsed.options.has("--solution-id")
-          ? { solutionId: parsed.options.get("--solution-id") ?? "" }
+        ...(flags.has("--solution-id")
+          ? { solutionId: flags.get("--solution-id") ?? "" }
           : {}),
         direction:
-          parsed.command === "dependencies impact"
+          command === "deps impact"
             ? "dependent"
-            : ((parsed.options.get("--direction") ??
-                (parsed.command === "dependencies list"
-                  ? "required"
-                  : "both")) as "required" | "dependent" | "both"),
-        depth:
-          parsed.command === "dependencies list" ? 1 : (values["--depth"] ?? 3),
+            : ((flags.get("--direction") ??
+                (command === "deps list" ? "required" : "both")) as
+                | "required"
+                | "dependent"
+                | "both"),
+        depth: command === "deps list" ? 1 : (values["--depth"] ?? 3),
         ...(values["--max-nodes"] === undefined
           ? {}
           : { maxNodes: values["--max-nodes"] }),
@@ -304,16 +265,14 @@ export async function runCli(
         ...(values["--max-queries"] === undefined
           ? {}
           : { maxQueries: values["--max-queries"] }),
-        bindings: !parsed.options.has("--no-bindings"),
+        bindings: !flags.has("--no-bindings"),
       };
       const graph = await dependencyGraph(client, options, {
         ...environment,
         organizationId: identity.organizationId,
       });
       const complete =
-        parsed.command === "dependencies list"
-          ? graph.complete
-          : graph.closureComplete;
+        command === "deps list" ? graph.complete : graph.closureComplete;
       return emit(
         {
           ...base,
@@ -325,33 +284,24 @@ export async function runCli(
           ],
           coverage: { complete, limitations: graph.limitations },
         },
-        json,
+        format,
         runtime,
       );
     }
-    if (
-      [
-        "connectors list",
-        "connection-references list",
-        "connection-references inspect",
-      ].includes(parsed.command)
-    ) {
-      const search = parsed.options.get("--search");
-      const solutionId = parsed.options.get("--solution-id");
-      const id = parsed.options.get("--reference-id");
+    if (["connector list", "connref list", "connref show"].includes(command)) {
+      const search = flags.get("--search");
+      const solutionId = flags.get("--solution-id");
+      const id = positionals.get("reference-id");
       const options = {
         ...(search === undefined ? {} : { search }),
         ...(solutionId === undefined ? {} : { solutionId }),
         ...(id === undefined ? {} : { id }),
       };
       const rows =
-        parsed.command === "connectors list"
+        command === "connector list"
           ? await connectors(client, options)
           : await connectionReferences(client, options);
-      if (
-        parsed.command === "connection-references inspect" &&
-        rows.length !== 1
-      )
+      if (command === "connref show" && rows.length !== 1)
         throw new InputError(
           "The connection reference was not found uniquely in the selected environment.",
         );
@@ -371,13 +321,13 @@ export async function runCli(
             ],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
     if (
       ["seed plan", "seed apply", "transfer plan", "transfer apply"].includes(
-        parsed.command,
+        command,
       )
     ) {
       const context = {
@@ -385,54 +335,40 @@ export async function runCli(
         organizationId: identity.organizationId,
       };
       let data: unknown;
-      if (parsed.command === "seed plan")
+      if (command === "seed plan")
         data = await planSeed(
           client,
-          JSON.parse(
-            await runtime.readFile(parsed.options.get("--seed-file") ?? ""),
-          ),
+          JSON.parse(await runtime.readFile(flags.get("--seed-file") ?? "")),
           context,
         );
-      else if (parsed.command === "transfer plan") {
+      else if (command === "transfer plan") {
         const input = record(
           JSON.parse(
-            await runtime.readFile(parsed.options.get("--manifest-file") ?? ""),
+            await runtime.readFile(flags.get("--manifest-file") ?? ""),
           ),
         );
         data = await planDataverseTransfer(
           client,
           input.outputVersion === outputVersion ? input.data : input,
-          JSON.parse(
-            await runtime.readFile(parsed.options.get("--policy-file") ?? ""),
-          ),
+          JSON.parse(await runtime.readFile(flags.get("--policy-file") ?? "")),
           parseMapping({
-            prefix: parsed.options.get("--prefix"),
-            solution: parsed.options.get("--solution"),
+            prefix: flags.get("--prefix"),
+            solution: flags.get("--solution"),
           }),
           context,
         );
       } else {
         const input = record(
-          JSON.parse(
-            await runtime.readFile(parsed.options.get("--plan-file") ?? ""),
-          ),
+          JSON.parse(await runtime.readFile(flags.get("--plan-file") ?? "")),
         );
         const plan = record(
           input.outputVersion === outputVersion ? input.data : input,
         );
-        if (
-          plan.purpose !==
-          (parsed.command === "seed apply" ? "seed" : "transfer")
-        )
+        if (plan.purpose !== (command === "seed apply" ? "seed" : "transfer"))
           throw new InputError(
             "The plan purpose does not match the apply command.",
           );
-        data = await applyDataPlan(
-          client,
-          plan,
-          context,
-          parsed.options.has("--confirm"),
-        );
+        data = await applyDataPlan(client, plan, context, true);
       }
       const report = record(data);
       return emit(
@@ -449,29 +385,29 @@ export async function runCli(
             limitations: (report.limitations ?? []) as readonly string[],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
     if (
       [
-        "solutions list",
-        "solution components",
-        "apps list",
-        "flows list",
-        "users list",
-        "variables list",
-        "environment compare",
-      ].includes(parsed.command)
+        "solution list",
+        "solution show",
+        "app list",
+        "flow list",
+        "user list",
+        "variable list",
+        "env compare",
+      ].includes(command)
     ) {
-      const search = parsed.options.get("--search");
+      const search = flags.get("--search");
       let data: unknown;
       let status: "ok" | "failed" | "inconclusive" = "ok";
       let limitations = [
         "Only resources visible to this caller are listed; app contents, flow definitions, secret values, and effective access are not inspected.",
       ];
-      if (parsed.command === "environment compare") {
-        const targetName = parsed.options.get("--target-env") ?? "";
+      if (command === "env compare") {
+        const targetName = flags.get("--target-env") ?? "";
         const targetProfile = selectEnvironment(config, targetName);
         if (targetProfile.url === profile.url)
           throw new InputError(
@@ -482,13 +418,13 @@ export async function runCli(
         const comparison = await compareEnvironments(
           client,
           target,
-          parsed.options.get("--scope") as
+          flags.get("--scope") as
             | "all"
             | "solutions"
             | "variables"
             | "components"
             | undefined,
-          parsed.options.get("--component-solution"),
+          flags.get("--component-solution"),
         );
         data = {
           ...comparison,
@@ -505,20 +441,20 @@ export async function runCli(
             ? "ok"
             : "failed";
         limitations = [...comparison.limitations];
-      } else if (parsed.command === "solutions list")
+      } else if (command === "solution list")
         data = { solutions: await solutions(client, search) };
-      else if (parsed.command === "solution components")
+      else if (command === "solution show")
         data = {
           components: await solutionComponents(
             client,
-            parsed.options.get("--solution-id") ?? "",
+            positionals.get("solution-id") ?? "",
           ),
         };
-      else if (parsed.command === "apps list")
+      else if (command === "app list")
         data = {
           apps: await apps(
             client,
-            parsed.options.get("--kind") as
+            flags.get("--kind") as
               | "all"
               | "canvas"
               | "model-driven"
@@ -526,9 +462,9 @@ export async function runCli(
             search,
           ),
         };
-      else if (parsed.command === "flows list")
+      else if (command === "flow list")
         data = { flows: await flows(client, search) };
-      else if (parsed.command === "users list")
+      else if (command === "user list")
         data = { users: await users(client, search) };
       else data = { variables: await variables(client, search) };
       return emit(
@@ -542,12 +478,12 @@ export async function runCli(
           ],
           coverage: { complete: status !== "inconclusive", limitations },
         },
-        json || argv.includes("--csv"),
+        format,
         runtime,
       );
     }
     if (
-      parsed.command === "transfer export" &&
+      command === "pg export" &&
       model !== undefined &&
       mapping !== undefined
     ) {
@@ -571,11 +507,11 @@ export async function runCli(
             ],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
-    if (parsed.command.startsWith("schema ")) {
+    if (command.startsWith("schema ")) {
       const schemaEnvironment = {
         ...environment,
         organizationId: identity.organizationId,
@@ -586,7 +522,7 @@ export async function runCli(
               client,
               inputPlan.data ?? inputPlan,
               schemaEnvironment,
-              parsed.options.has("--confirm"),
+              true,
             )
           : mapping !== undefined && model !== undefined
             ? await planSchema(
@@ -599,7 +535,7 @@ export async function runCli(
               ? await inspectSchema(client, mapping)
               : undefined;
       const unfinished =
-        parsed.command === "schema apply" &&
+        command === "schema apply" &&
         ((record(data).operations as readonly unknown[]).length !== 0 ||
           (record(data).blocked as readonly unknown[]).length !== 0);
       return emit(
@@ -618,26 +554,26 @@ export async function runCli(
             ],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
-    if (parsed.command === "tables list" || parsed.command === "query") {
+    if (command === "table list" || command === "record query") {
       let data: unknown;
       let complete = true;
-      if (parsed.command === "tables list")
-        data = { tables: await tables(client, parsed.options.get("--search")) };
+      if (command === "table list")
+        data = { tables: await tables(client, flags.get("--search")) };
       else {
-        const filterPath = parsed.options.get("--filter-file");
+        const filterPath = flags.get("--filter-file");
         const filter =
           filterPath === undefined
             ? undefined
             : await runtime.readFile(filterPath);
-        const orderBy = parsed.options.get("--order-by");
-        const rawLimit = parsed.options.get("--limit");
+        const orderBy = flags.get("--order-by");
+        const rawLimit = flags.get("--limit");
         const result = await query(client, {
-          table: parsed.options.get("--table") ?? "",
-          select: (parsed.options.get("--select") ?? "")
+          table: positionals.get("table") ?? "",
+          select: (flags.get("--select") ?? "")
             .split(",")
             .map((column) => column.trim()),
           ...(filter === undefined ? {} : { filter }),
@@ -665,24 +601,22 @@ export async function runCli(
                 ],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
-    if (selector !== undefined) {
+    if (command === "user show" || command === "role check") {
       const roleId =
-        parsed.command === "check role"
+        command === "role check"
           ? await resolveRole(client, {
-              ...(parsed.options.has("--role-id")
-                ? { id: parsed.options.get("--role-id") ?? "" }
-                : { name: parsed.options.get("--role") ?? "" }),
+              ...(flags.has("--role-id")
+                ? { id: flags.get("--role-id") ?? "" }
+                : { name: flags.get("--role") ?? "" }),
             })
           : undefined;
       const assignments = await userRoles(
         client,
-        parsed.options.has("--caller")
-          ? { field: "id", value: identity.applicationUserId }
-          : selector,
+        userSelector(flags, identity.applicationUserId),
       );
       const assigned =
         roleId === undefined
@@ -714,7 +648,7 @@ export async function runCli(
             ],
           },
         },
-        json,
+        format,
         runtime,
       );
     }
@@ -724,7 +658,7 @@ export async function runCli(
         caller: { id: identity.applicationUserId, kind: "application-user" },
         status: "ok",
         data:
-          parsed.command === "doctor"
+          command === "env doctor"
             ? {
                 checks: [
                   { name: "configuration", status: "ok" },
@@ -749,7 +683,7 @@ export async function runCli(
           ],
         },
       },
-      json,
+      format,
       runtime,
     );
   } catch (error) {
@@ -771,7 +705,7 @@ export async function runCli(
         timestamp: runtime.now(),
         ...(environment === undefined ? {} : { environment }),
         status: "error",
-        ...(command === "doctor"
+        ...(command === "env doctor"
           ? {
               data: {
                 checks: [
@@ -814,108 +748,54 @@ export async function runCli(
         },
         error: { code, message },
       },
-      json,
+      format,
       runtime,
     );
   }
 }
 
-function parseArguments(argv: readonly string[]): ParsedArguments {
-  const options = new Map<string, string>();
-  const positionals: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === undefined) continue;
-    const definition = optionDefinitions.find(
-      (option) => option.name === argument,
-    );
-    if (definition !== undefined) {
-      if (options.has(argument))
-        throw new InputError(`Duplicate option ${argument}.`);
-      let value = "true";
-      if (definition.value !== null) {
-        const supplied = argv[++index];
-        if (
-          supplied === undefined ||
-          supplied === "" ||
-          supplied.startsWith("--")
-        )
-          throw new InputError(`${argument} requires a value.`);
-        value = supplied;
-      }
-      options.set(argument, value);
-    } else if (argument.startsWith("-")) {
-      throw new InputError(`Unknown option ${argument}.`);
-    } else {
-      positionals.push(argument);
-    }
-  }
-  const command = commandDefinitions.find(
-    (definition) => definition.path === positionals.join(" "),
-  );
-  if (command === undefined)
-    throw new InputError("Unknown command. Use --help.");
-  const allowedOptions = commandOptions(command.path);
-  for (const name of options.keys()) {
-    if (!allowedOptions.some((option) => option.name === name))
-      throw new InputError(`Option ${name} is not valid for ${command.path}.`);
-  }
-  for (const option of allowedOptions) {
-    if (optionRequired(option, command.path) && !options.has(option.name))
-      throw new InputError(`${option.name} is required.`);
-  }
-  return {
-    command: command.path,
-    configPath: options.get("--config") ?? "unverse.config.json",
-    environmentName: options.get("--env") ?? "",
-    options,
-  };
+const userFlagFields = [
+  ["--user-id", "id"],
+  ["--email", "email"],
+  ["--domain", "domain"],
+  ["--name", "name"],
+] as const;
+
+function userSelector(
+  flags: ReadonlyMap<string, string>,
+  callerId: string,
+): UserSelector {
+  if (flags.has("--caller")) return { field: "id", value: callerId };
+  const [flag, field] =
+    userFlagFields.find(([name]) => flags.has(name)) ?? userFlagFields[0];
+  return { field, value: flags.get(flag) ?? "" };
 }
 
-function userSelector(options: ReadonlyMap<string, string>): UserSelector {
-  const selectors = [
-    "--user-id",
-    "--email",
-    "--domain",
-    "--name",
-    "--caller",
-  ].filter((option) => options.has(option));
-  if (selectors.length !== 1)
-    throw new InputError(
-      "Select exactly one of --user-id, --email, --domain, --name, or --caller.",
-    );
-  const selected = selectors[0] ?? "";
-  if (selected === "--caller")
-    return { field: "id", value: "__authenticated_caller__" };
-  return {
-    field:
-      selected === "--user-id"
-        ? "id"
-        : selected === "--email"
-          ? "email"
-          : selected === "--name"
-            ? "name"
-            : "domain",
-    value: options.get(selected) ?? "",
-  };
+function render(result: Result<unknown>, format: Format): string {
+  switch (format) {
+    case "json":
+      return `${JSON.stringify(result)}\n`;
+    case "human":
+      return `${JSON.stringify(result, null, 2)}\n`;
+    case "csv":
+      return renderCsv(result);
+    default: {
+      const graph = record(result.data).graph as DependencyGraph;
+      if (format === "html") return dependencyHtml(graph);
+      return format === "svg" ? dependencySvg(graph) : dependencyMermaid(graph);
+    }
+  }
 }
 
 function emit(
   result: Result<unknown>,
-  json: boolean,
+  format: Format,
   runtime: CliRuntime,
 ): number {
-  if (json)
-    runtime.writeOut(
-      `${redactText(JSON.stringify(result), runtime.secrets)}\n`,
-    );
-  else if (result.status === "error")
+  if (format !== "json" && result.status === "error")
     runtime.writeError(
       `${redactText(result.error?.message ?? "Command failed.", runtime.secrets)}\n`,
     );
-  else
-    runtime.writeOut(
-      `${redactText(JSON.stringify(result, null, 2), runtime.secrets)}\n`,
-    );
+  else runtime.writeOut(redactText(render(result, format), runtime.secrets));
   return exitCodeFor(result);
 }

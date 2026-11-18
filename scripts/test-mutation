@@ -98,6 +98,10 @@ mutations.push(
   ["graph-connection-identity", "dataverse/dependencies.js", 'kind === "connection"', "false", "dataverse", "opaque connection identity is qualified by its connector binding", "dependencies"],
   ["graph-secret-fields", "dataverse/connections.js", "statecode,ismanaged", "statecode,ismanaged,connectionparametersconfig", "dataverse", "connection metadata excludes credentials and separates bindings from dependencies", "dependencies"],
   ["graph-label-identity", "dataverse/dependencies.js", "guid(text(row, key)) !== node.objectId", "false", "dataverse", "unrelated label metadata cannot invent a connection binding", "dependencies"],
+  ["group-exactly-one", "cli/arguments.js", "group.flags.filter((name) => values.has(name)).length !== 1", "false", "cli", "an exactly-one-of group rejects none and several of its flags"],
+  ["argument-separator", "cli/arguments.js", 'token === "--"', "false", "cli", "a double dash ends flag parsing"],
+  ["attached-value", "cli/arguments.js", 'token.indexOf("=")', "-1", "cli", "flag values bind with an equals sign or as the next token"],
+  ["spec-effect", "cli/help.js", "effect: command.effect,", 'effect: "read",', "cli", "every command declares its effect in help, the reference, and the spec"],
 );
 
 mutations.push(

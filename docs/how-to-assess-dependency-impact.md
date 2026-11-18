@@ -17,7 +17,7 @@ dependents, not requirements, and never calls a delete or update operation.
 1. Trace consumers; the GUID is a placeholder:
 
    ```sh
-   unverse dependencies impact --env dev --reference-id 00000000-0000-0000-0000-000000000101 --depth 6 --json
+   unverse deps impact --env dev --reference-id 00000000-0000-0000-0000-000000000101 --depth 6 --format json
    ```
 
    The installed fixture returned four potentially affected components,
@@ -30,8 +30,8 @@ dependents, not requirements, and never calls a delete or update operation.
    traversal or duplicate impact rows. Solution membership is excluded from
    impact paths, so merely sharing a solution does not imply impact.
 
-3. Add `--html`, `--mermaid`, or `--svg` for a visual projection using the same graph and
-   coverage rules. Return to JSON for full path and issue records.
+3. Use `--format html`, `--format mermaid`, or `--format svg` for a visual
+   projection using the same graph and coverage rules. Return to JSON for full path and issue records.
 
 ## What can go wrong
 

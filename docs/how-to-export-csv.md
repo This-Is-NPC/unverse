@@ -8,8 +8,8 @@ environment is configured.
 
 ## Before you start
 
-Choose `--csv` or `--json`, not both. Standard output contains only the selected
-format. Error messages go to standard error in CSV mode; check the exit code
+`--format` takes exactly one of `human`, `json`, or `csv`. Standard output
+contains only the selected format. Error messages go to standard error in CSV mode; check the exit code
 before consuming a file. User, row, and manifest exports can contain personal
 or business data even though variable values are masked.
 
@@ -18,7 +18,7 @@ or business data even though variable values are masked.
 1. Export visible apps; the output filename is a placeholder:
 
    ```sh
-   unverse apps list --env dev --csv > apps.csv
+   unverse app list --env dev --format csv > apps.csv
    ```
 
    The installed fixture starts with `"command","status","environment"`,

@@ -10,14 +10,14 @@ import { seedSpec } from "../../packages/core/test/fixtures/seed.mjs";
 
 export const scenes = [
   { name: "01-help", args: ["--help"] },
-  { name: "02-config", args: ["config", "validate", "--env", "dev"] },
-  { name: "03-whoami", args: ["whoami", "--env", "dev"] },
-  { name: "04-doctor", args: ["doctor", "--env", "dev"] },
+  { name: "02-config", args: ["config", "check", "--env", "dev"] },
+  { name: "03-whoami", args: ["env", "whoami", "--env", "dev"] },
+  { name: "04-doctor", args: ["env", "doctor", "--env", "dev"] },
   {
     name: "05-user-roles",
     args: [
       "user",
-      "roles",
+      "show",
       "--env",
       "dev",
       "--email",
@@ -27,8 +27,8 @@ export const scenes = [
   {
     name: "06-check-role",
     args: [
-      "check",
       "role",
+      "check",
       "--env",
       "dev",
       "--user-id",
@@ -39,16 +39,16 @@ export const scenes = [
   },
   {
     name: "07-tables",
-    args: ["tables", "list", "--env", "dev", "--search", "account"],
+    args: ["table", "list", "--env", "dev", "--search", "account"],
   },
   {
     name: "08-query",
     args: [
+      "record",
       "query",
+      "account",
       "--env",
       "dev",
-      "--table",
-      "account",
       "--select",
       "accountid,name",
       "--order-by",
@@ -84,9 +84,9 @@ export const scenes = [
     ],
   },
   {
-    name: "11-transfer-export",
+    name: "11-pg-export",
     args: [
-      "transfer",
+      "pg",
       "export",
       "--env",
       "dev",
@@ -100,33 +100,32 @@ export const scenes = [
   },
   {
     name: "12-solutions",
-    args: ["solutions", "list", "--env", "dev", "--search", "fixture"],
+    args: ["solution", "list", "--env", "dev", "--search", "fixture"],
   },
   {
     name: "13-components",
     args: [
       "solution",
-      "components",
+      "show",
+      "00000000-0000-0000-0000-000000000011",
       "--env",
       "dev",
-      "--solution-id",
-      "00000000-0000-0000-0000-000000000011",
     ],
   },
   {
     name: "14-apps",
-    args: ["apps", "list", "--env", "dev", "--search", "synthetic"],
+    args: ["app", "list", "--env", "dev", "--search", "synthetic"],
   },
-  { name: "15-flows", args: ["flows", "list", "--env", "dev"] },
+  { name: "15-flows", args: ["flow", "list", "--env", "dev"] },
   {
     name: "16-users",
-    args: ["users", "list", "--env", "dev", "--search", "synthetic"],
+    args: ["user", "list", "--env", "dev", "--search", "synthetic"],
   },
-  { name: "17-variables", args: ["variables", "list", "--env", "dev"] },
+  { name: "17-variables", args: ["variable", "list", "--env", "dev"] },
   {
     name: "18-comparison",
     args: [
-      "environment",
+      "env",
       "compare",
       "--env",
       "dev",
@@ -157,26 +156,25 @@ export const scenes = [
       "policy.json",
     ],
   },
-  { name: "21-connectors", args: ["connectors", "list", "--env", "dev"] },
+  { name: "21-connectors", args: ["connector", "list", "--env", "dev"] },
   {
     name: "22-connection-references",
-    args: ["connection-references", "list", "--env", "dev"],
+    args: ["connref", "list", "--env", "dev"],
   },
   {
     name: "23-reference-inspection",
     args: [
-      "connection-references",
-      "inspect",
+      "connref",
+      "show",
+      "00000000-0000-0000-0000-000000000101",
       "--env",
       "dev",
-      "--reference-id",
-      "00000000-0000-0000-0000-000000000101",
     ],
   },
   {
     name: "24-dependencies",
     args: [
-      "dependencies",
+      "deps",
       "list",
       "--env",
       "dev",
@@ -189,7 +187,7 @@ export const scenes = [
   {
     name: "25-dependency-graph",
     args: [
-      "dependencies",
+      "deps",
       "graph",
       "--env",
       "dev",
@@ -202,7 +200,7 @@ export const scenes = [
   {
     name: "26-dependency-impact",
     args: [
-      "dependencies",
+      "deps",
       "impact",
       "--env",
       "dev",
@@ -215,7 +213,7 @@ export const scenes = [
   {
     name: "27-dependency-visual",
     args: [
-      "dependencies",
+      "deps",
       "graph",
       "--env",
       "dev",
@@ -223,14 +221,15 @@ export const scenes = [
       "00000000-0000-0000-0000-000000000101",
       "--depth",
       "6",
-      "--html",
+      "--format",
+      "html",
     ],
     render: "html",
   },
   {
     name: "28-dependency-svg",
     args: [
-      "dependencies",
+      "deps",
       "graph",
       "--env",
       "dev",
@@ -238,10 +237,13 @@ export const scenes = [
       "00000000-0000-0000-0000-000000000101",
       "--depth",
       "6",
-      "--svg",
+      "--format",
+      "svg",
     ],
     render: "svg",
   },
+  { name: "29-env-list", args: ["env", "list"] },
+  { name: "30-command-help", args: ["schema", "apply", "--help"] },
 ];
 
 export async function stageScenes(root, consumer) {

@@ -1,17 +1,17 @@
 # Terminal views
 
 Unverse has no TUI, interactive forms, or persistent screens. Every diagnostic
-prints output and exits. `--help` displays help; `Ctrl-C` interrupts a running
+prints output and exits. `--help` or `-h` displays help; `Ctrl-C` interrupts a running
 command. Credential acquisition has no interactive login screen.
 
 ## How pictures are made
 
-The dependency visual scene renders the installed command's actual `--html`
+The dependency visual scene renders the installed command's actual `--format html`
 output instead of wrapping stdout in a terminal view. It is a real canvas page
 rendered in the pinned Chromium revision. Its layout, synthetic metadata,
 colors, and viewport are pinned; its browser system fonts are not portable
 pixel-identical across operating systems. It loads no external assets or scripts.
-The static SVG scene places the installed command's actual `--svg` output in
+The static SVG scene places the installed command's actual `--format svg` output in
 the same Chromium page and captures only the drawing. Pele measures text with
 its own estimate, so the layout is pinned; the browser's sans-serif font is not.
 
@@ -33,49 +33,49 @@ separate screen. Live checks, packaging, and CI have no persistent UI.
 
 ## 1. Help
 
-`unverse --help` lists the implemented command definitions and arguments.
+`unverse --help` lists every command by stage with its effect.
 
 ![Help](img/01-help.png)
 
 ## 2. Configuration
 
-`unverse config validate --env dev` validates only the local profile.
+`unverse config check --env dev` validates only the local profile.
 
 ![Configuration](img/02-config.png)
 
 ## 3. Caller identity
 
-`unverse whoami --env dev` reports returned organization and caller evidence.
+`unverse env whoami --env dev` reports returned organization and caller evidence.
 
 ![WhoAmI](img/03-whoami.png)
 
 ## 4. Environment probe
 
-`unverse doctor --env dev` reports the limited WhoAmI probe.
+`unverse env doctor --env dev` reports the limited WhoAmI probe.
 
 ![Doctor](img/04-doctor.png)
 
 ## 5. User roles
 
-`user roles` retains direct and retrieved-team assignment sources.
+`user show` retains direct and retrieved-team assignment sources.
 
 ![Role inspection](img/05-user-roles.png)
 
 ## 6. Expected assignment
 
-`check role` distinguishes a completed missing expectation from failed reads.
+`role check` distinguishes a completed missing expectation from failed reads.
 
 ![Role check](img/06-check-role.png)
 
 ## 7. Discovery
 
-`tables list` reports metadata without guessing physical names.
+`table list` reports metadata without guessing physical names.
 
 ![Tables](img/07-tables.png)
 
 ## 8. Read query
 
-`query` prints selected columns and explicit coverage.
+`record query` prints selected columns and explicit coverage.
 
 ![Query](img/08-query.png)
 
@@ -98,15 +98,15 @@ pass `--confirm` explicitly; the one-shot JSON result reports the re-inspected
 plan. The picture task does not perform schema writes. The dedicated DEV
 fixture check exercises apply, an additive field, and idempotence separately.
 
-## 12. Transfer export
+## 12. PostgreSQL export
 
 The installed fixture emits a versioned, fingerprinted manifest for two
 related synthetic rows. It contains values and IDs and should be kept private
 when used with real data.
 
-![Transfer export](img/11-transfer-export.png)
+![Transfer export](img/11-pg-export.png)
 
-## 13. Transfer import and verification
+## 13. PostgreSQL import and verification
 
 These commands have no persistent screens or interactive dialogs. Import
 requires `--confirm`. Both print the same versioned result envelope, containing
@@ -215,7 +215,7 @@ Incoming paths identify consumers to review, not guaranteed runtime breakage.
 
 ## 30. Visual dependency graph
 
-The installed `--html` output is opened in Chromium after its layout finishes.
+The installed `--format html` output is opened in Chromium after its layout finishes.
 The canvas fills the window; small floating toolbars sit on top of it. The
 initial view groups artifacts by type in layers, consumers left of their
 requirements, and fits them to the window. Expanding a type turns it into a
@@ -240,10 +240,27 @@ screen. Incomplete graphs have explicit visual warnings in every format.
 
 ## 31. Static SVG dependency graph
 
-`--svg` writes the Mermaid graph drawn by Pele as one SVG file. It has no keys
+`--format svg` writes the Mermaid graph drawn by Pele as one SVG file. It has no keys
 and no interaction. The title states complete or incomplete, the frontier and
 the issue count. The root has a blue outline; solid arrows are declared
 dependencies and dashed arrows are membership or bindings. The file follows the
 viewer's light or dark setting; the picture shows light.
 
 ![Static SVG dependency graph](img/28-dependency-svg.png)
+
+## 32. Environment list
+
+`unverse env list` reads only the configuration file. It prints each profile
+name and normalized URL, never a credential variable name or value, and does
+not contact Dataverse.
+
+![Environment list](img/29-env-list.png)
+
+## 33. Command help
+
+`unverse <command> --help` shows the command's usage, effect, output formats,
+flags, exactly-one-of rules, and the exit codes it adds to the global table.
+A group such as `unverse table --help` lists its commands. A bare group prints
+that list to standard error and exits 2.
+
+![Command help](img/30-command-help.png)

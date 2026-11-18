@@ -24,7 +24,7 @@ pagination have not been verified in a development environment.
 2. Run the read using explicit columns and deterministic ordering:
 
    ```sh
-   unverse query --env dev --table account --select accountid,name --filter-file filter.txt --order-by "accountid asc" --limit 100 --json
+   unverse record query account --env dev --select accountid,name --filter-file filter.txt --order-by "accountid asc" --limit 100 --format json
    ```
 
    Offline tests observed that `account` resolves to entity set `accounts`,
@@ -43,7 +43,7 @@ pagination have not been verified in a development environment.
 
 ## What can go wrong
 
-`--select` and `--table` are required. Column and table names must be logical
+`--select` and the `<table>` argument are required. Column and table names must be logical
 identifiers. Ordering accepts column names with optional `asc` or `desc`.
 Filters are explicit operator-provided expressions, not an arbitrary SQL or
 JavaScript execution facility. The server validates the filter expression.

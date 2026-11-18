@@ -21,7 +21,7 @@ visible to the authenticated application user. No artifact is modified.
 1. Read direct requirements or consumers:
 
    ```sh
-   unverse dependencies list --env dev --reference-id 00000000-0000-0000-0000-000000000101 --direction dependent --json
+   unverse deps list --env dev --reference-id 00000000-0000-0000-0000-000000000101 --direction dependent --format json
    ```
 
    The installed fixture observed a flow requiring that reference. Each solid
@@ -33,7 +33,7 @@ visible to the authenticated application user. No artifact is modified.
 2. Build a transitive graph:
 
    ```sh
-   unverse dependencies graph --env dev --reference-id 00000000-0000-0000-0000-000000000101 --depth 6 --json
+   unverse deps graph --env dev --reference-id 00000000-0000-0000-0000-000000000101 --depth 6 --format json
    ```
 
    The synthetic graph contains flows, a canvas app, a custom connector, an
@@ -49,7 +49,7 @@ visible to the authenticated application user. No artifact is modified.
 3. Export an actual visual graph:
 
    ```sh
-   unverse dependencies graph --env dev --reference-id 00000000-0000-0000-0000-000000000101 --depth 6 --html > dependencies.html
+   unverse deps graph --env dev --reference-id 00000000-0000-0000-0000-000000000101 --depth 6 --format html > dependencies.html
    ```
 
    Open the file in a browser with JavaScript enabled. The canvas fills the
@@ -83,26 +83,26 @@ visible to the authenticated application user. No artifact is modified.
    are not health-tested nodes. The file embeds Cytoscape.js and its MIT
    license, with no external fonts, assets, remote renderer, or network requests.
 
-4. For Markdown-compatible tooling, replace `--html` with `--mermaid` and save
+4. For Markdown-compatible tooling, replace `--format html` with `--format mermaid` and save
    a `.mmd` file. Metadata labels are escaped rather than treated as diagram
    directives or HTML.
 
-5. For a picture to embed in a page or a pull request, replace `--html` with
-   `--svg` and save a `.svg` file. The same Mermaid graph is drawn locally by
+5. For a picture to embed in a page or a pull request, replace `--format html` with
+   `--format svg` and save a `.svg` file. The same Mermaid graph is drawn locally by
    Pele. The title says whether the graph is complete and counts its frontier
    and issues. The file follows the viewer's light or dark setting and has no
    scripts or external assets.
 
    ![Static SVG dependency graph](img/28-dependency-svg.png)
 
-   Select one output format; JSON retains the complete versioned result, while
-   HTML, Mermaid, and SVG are visual projections.
+   `--format` takes one value; `json` retains the complete versioned result, while
+   `html`, `mermaid`, and `svg` are visual projections.
 
 ## What can go wrong
 
 The default bounds are depth 3, 200 nodes, 1000 edges, and 100 logical collection
 queries. `--depth` supports 0–10; `--max-nodes`, `--max-edges`, and `--max-queries`
-adjust the documented bounds in [the CLI reference](cli.md#dependencies-graph).
+adjust the documented bounds in [the CLI reference](cli.md#deps-graph).
 The query budget excludes WhoAmI, HTTP pagination, and safe-read retries.
 
 Graph and impact exit 7 when traversal has failures, limits, or a depth frontier.

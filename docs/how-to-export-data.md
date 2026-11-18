@@ -19,7 +19,7 @@ Keep exported manifests private: they contain IDs and record values.
    below are placeholders:
 
    ```sh
-   unverse transfer export --env dev --prefix tx --solution TransferFixture --model-file schema.json --json > manifest.json
+   unverse pg export --env dev --prefix tx --solution TransferFixture --model-file schema.json --format json > manifest.json
    ```
 
    The installed synthetic fixture exported one parent, one related child,

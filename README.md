@@ -31,7 +31,7 @@ No package publication, npm scope ownership, or public download URL is implied.
 ## Start here
 
 1. [Connect a development environment](docs/how-to-connect-an-environment.md).
-2. Run `unverse whoami --env dev --json` with the configured credential
+2. Run `unverse env whoami --env dev --format json` with the configured credential
    variables already exported by your secret manager or shell.
 3. [Discover a table](docs/how-to-discover-tables.md), then
    [repeat a read](docs/how-to-query-records.md).
@@ -51,10 +51,11 @@ Profiles contain variable references, not secret values. See
 deduplication. Assignment inspection does not prove effective access. See
 [role inspection](docs/how-to-list-user-roles.md).
 
-**Automation.** JSON stdout contains one versioned result. Failed expectations,
+**Automation.** `--format json` writes one versioned result to stdout. Failed expectations,
 invalid input, authentication, permissions, service failures, unsupported
 capabilities, and incomplete coverage have distinct exits. See
-[results](docs/design.md#8-results-and-exits).
+[results](docs/design.md#8-results-and-exits) and the
+[command model](docs/design.md#18-command-model).
 
 **Verified subset.** [Transfer manifests](docs/how-to-export-data.md) retain
 modeled IDs, relationships, decimals, and temporal semantics. PostgreSQL
@@ -69,35 +70,43 @@ an explicit field-copy policy and never clear or overwrite target rows.
 ## Interface
 
 There is no TUI or persistent screen. Enter a command in your shell; it prints
-one result and exits. `--help` lists commands. `Ctrl-C` interrupts the current
-command. [Terminal views](docs/screens.md) show every implemented diagnostic.
-Graph commands also export an HTML canvas, Mermaid, and a static SVG; they do
-not start a server or add a TUI. Browser zoom and scrolling work on the HTML file.
+one result and exits. Commands are `<group> <command>`: `unverse --help` lists
+them by stage (observe, plan, apply) with each command's effect, and
+`unverse <group> --help` or `unverse <command> --help` explains one. `Ctrl-C`
+interrupts the current command. `--format human|json|csv` selects the output;
+graph commands also offer `html`, `mermaid`, and `svg`.
+[Terminal views](docs/screens.md) show every implemented diagnostic. Graph
+commands do not start a server or add a TUI. Browser zoom and scrolling work on
+the HTML file. `unverse spec` prints the whole command spec as JSON, so tools
+can allowlist the `read` commands.
 
 | Command | Purpose |
 | --- | --- |
-| `config validate` | Validate one local profile |
-| `whoami` | Identify the actual caller |
-| `doctor` | Probe configuration, authentication, and WhoAmI |
-| `user roles` | Inspect direct and retrieved-team assignments |
-| `check role` | Check an expected assignment |
-| `tables list` | Discover table metadata |
-| `query` | Run a paginated read |
+| `config check` | Validate one local profile |
+| `env list` | List configured profile names and URLs offline |
+| `env whoami` | Identify the actual caller |
+| `env doctor` | Probe configuration, authentication, and WhoAmI |
+| `env compare` | Compare profiles by masked settings and solutions |
+| `user show` | Inspect direct and retrieved-team assignments |
+| `role check` | Check an expected assignment |
+| `table list` | Discover table metadata |
+| `record query <table>` | Run a paginated read |
 | `schema inspect` | Inspect an explicitly mapped namespace |
 | `schema plan` | Review additive operations and blocked changes |
 | `schema apply` | Apply a confirmed, fresh, environment-bound plan |
-| `transfer export` | Export a compatible modeled dataset |
-| `transfer import` | Create and verify an owned PostgreSQL schema |
-| `transfer verify` | Compare a committed target with its manifest |
-| `solutions list` / `solution components` | Find solutions and inspect membership |
-| `apps list` / `flows list` | Find visible apps and cloud flows |
-| `users list` | Find exact user identifiers for role investigation |
-| `variables list` / `environment compare` | Inspect masked settings and compare profiles |
+| `pg export` | Export a compatible modeled dataset |
+| `pg import` | Create and verify an owned PostgreSQL schema |
+| `pg verify` | Compare a committed target with its manifest |
+| `solution list` / `solution show <solution-id>` | Find solutions and inspect membership |
+| `app list` / `flow list` | Find visible apps and cloud flows |
+| `user list` | Find exact user identifiers for role investigation |
+| `variable list` | Inspect masked settings |
 | `seed plan` / `seed apply` | Create deterministic, reviewed development fixtures |
 | `transfer plan` / `transfer apply` | Review and apply a create-only Dataverse transfer |
-| `connectors list` | Inspect visible solution-aware connector metadata |
-| `connection-references list` / `inspect` | Inspect bindings without claiming health |
-| `dependencies list` / `graph` / `impact` | Explore declared dependencies and potential impact |
+| `connector list` | Inspect visible solution-aware connector metadata |
+| `connref list` / `connref show <reference-id>` | Inspect bindings without claiming health |
+| `deps list` / `deps graph` / `deps impact` | Explore declared dependencies and potential impact |
+| `spec` | Print the command spec as JSON |
 
 See the generated [CLI reference](docs/cli.md) for arguments.
 
@@ -111,7 +120,7 @@ are bundled.
 
 ## Known limitations
 
-- `doctor` probes WhoAmI only; it does not establish other permissions.
+- `env doctor` probes WhoAmI only; it does not establish other permissions.
 - Retrieved teams do not establish complete transitive Entra group membership.
 - Record reads are not a transactional snapshot across pages.
 - Row caps report incomplete coverage instead of proving total counts.

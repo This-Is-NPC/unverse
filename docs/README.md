@@ -10,7 +10,7 @@ tarballs; no npm publication is implied.
 ## Start here
 
 1. [Connect an environment](how-to-connect-an-environment.md), then identify
-   the caller with [WhoAmI](cli.md#whoami).
+   the caller with [WhoAmI](cli.md#env-whoami).
 2. [List roles](how-to-list-user-roles.md) or
    [check an assignment](how-to-check-a-role.md).
 3. [Discover tables](how-to-discover-tables.md), then
@@ -27,7 +27,7 @@ tarballs; no npm publication is implied.
 | Question | Page |
 | --- | --- |
 | What is the proposed scope and architecture? | [Design](design.md) |
-| How do I validate an environment profile? | [CLI reference](cli.md#config-validate) |
+| How do I validate an environment profile? | [CLI reference](cli.md#config-check) |
 | How do I connect a development environment? | [Connect an environment](how-to-connect-an-environment.md) |
 | Which roles are assigned to a user? | [List user roles](how-to-list-user-roles.md) |
 | How can CI check a role assignment? | [Check a role](how-to-check-a-role.md) |
@@ -55,5 +55,8 @@ tarballs; no npm publication is implied.
 - New documentation is in English and lives in this directory.
 - Planning documents distinguish proposed work from implemented behaviour.
 - User guides use actual output from the program and state their prerequisites.
-- The CLI reference will be generated from implemented command definitions.
+- The CLI reference is generated from the command spec; `unverse spec` prints
+  the same spec as JSON.
+- Commands are `<group> <command>`; [the command model](design.md#18-command-model)
+  explains the grammar, effects, and output formats.
 - Links in this map point only to pages that currently exist.

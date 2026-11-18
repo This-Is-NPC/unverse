@@ -35,7 +35,7 @@ identifiers and every permitted copied field have been reviewed and authorized.
 1. Plan against the explicitly selected destination:
 
    ```sh
-   unverse transfer plan --env test --prefix uv --solution CommunityExample --manifest-file manifest.json --policy-file policy.json --json > transfer-plan.json
+   unverse transfer plan --env test --prefix uv --solution CommunityExample --manifest-file manifest.json --policy-file policy.json --format json > transfer-plan.json
    ```
 
    Profile, prefix, solution, and file paths are placeholders. The plan stores
@@ -47,7 +47,7 @@ identifiers and every permitted copied field have been reviewed and authorized.
 2. Review all proposed rows and apply with confirmation:
 
    ```sh
-   unverse transfer apply --env test --plan-file transfer-plan.json --confirm --json
+   unverse transfer apply --env test --plan-file transfer-plan.json --confirm --format json
    ```
 
    The same guarded data executor as seed creates rows before links and checks

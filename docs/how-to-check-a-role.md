@@ -20,7 +20,7 @@ GUID: role names are not unique across business units.
 1. Select a user and exactly one of `--role-id` or `--role`:
 
    ```sh
-   unverse check role --env dev --email synthetic@example.invalid --role-id 00000000-0000-0000-0000-000000000002 --json
+   unverse role check --env dev --email synthetic@example.invalid --role-id 00000000-0000-0000-0000-000000000002 --format json
    ```
 
    Synthetic CLI tests observed exit 1 and `data.assigned: false` for a
@@ -41,5 +41,5 @@ not inferred beyond the retrieved teams.
 
 ## Next
 
-Read [the CLI reference](cli.md#check-role) and the
+Read [the CLI reference](cli.md#role-check) and the
 [result contract](design.md#8-results-and-exits) when integrating with CI.

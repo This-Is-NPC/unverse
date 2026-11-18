@@ -30,7 +30,7 @@ and ownership of the new namespace. Use a dedicated non-system schema;
 1. Import with explicit confirmation:
 
    ```sh
-   unverse transfer import --env dev --manifest-file manifest.json --confirm --json
+   unverse pg import --env dev --manifest-file manifest.json --confirm --format json
    ```
 
    Installed-package tests imported the synthetic manifest into disposable

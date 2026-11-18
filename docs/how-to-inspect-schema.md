@@ -16,7 +16,7 @@ to reuse in an existing environment. Metadata read permissions are required.
 1. Inspect the explicit namespace:
 
    ```sh
-   unverse schema inspect --env dev --prefix uv --solution UnverseFixture --json
+   unverse schema inspect --env dev --prefix uv --solution UnverseFixture --format json
    ```
 
    The installed synthetic fixture produced `data.entities: []` for an empty

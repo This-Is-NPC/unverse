@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
-import { renderCliReference } from "./commands.js";
+import { renderCliReference } from "./help.js";
 
 const document = renderCliReference();
 if (process.argv.includes("--stdout")) {

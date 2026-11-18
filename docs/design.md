@@ -1,6 +1,6 @@
 # Unverse design
 
-Status: configuration validation, `whoami`, and the `doctor` WhoAmI probe are
+Status: configuration checks, `env whoami`, and the `env doctor` WhoAmI probe are
 implemented and tested offline. Authorized read-only DEV observations confirm
 caller identity, caller role collection, account metadata, and an empty read.
 Role assignment inspection, checks, table discovery, and OData query commands
@@ -104,30 +104,32 @@ the wrong organization. Profiles without the field are not checked.
 
 Environment operations require an explicit environment name. Invalid or
 incomplete profiles fail before token acquisition or a network request.
-`config validate` implements this preflight without acquiring a token.
+`config check` implements this preflight without acquiring a token.
 
-## 7. Proposed command surface
+## 7. Command surface
 
-Implemented commands are generated in [the CLI reference](cli.md).
-`whoami` reports organization, caller, and business unit identifiers returned
-by Dataverse. `doctor` reports configuration, token, and WhoAmI checks; it
-does not probe table, role, or record access. Failed probes retain their
-command and selected environment and do not report successful coverage.
-The following table includes implemented preflight and identity commands and
-implemented role and query commands:
+Every command is `unverse <group> <command>` or the root command
+`unverse spec`. The command spec declares them once and generates the help,
+[the CLI reference](cli.md), and `unverse spec`; the rules behind it are in
+§18. The implemented groups are:
 
-| Command | Intended behaviour |
+| Group | Commands |
 | --- | --- |
-| `unverse config validate --env dev` | Validate one local profile without contacting Dataverse |
-| `unverse doctor --env dev` | Report configuration, authentication, reachability, and probed permissions |
-| `unverse whoami --env dev` | Report organization and application user identity |
-| `unverse user roles --email user@example.com --env dev` | List direct and team-derived roles |
-| `unverse check role --email user@example.com --role-id <guid> --env dev` | Check one expected role assignment |
-| `unverse tables list --search account --env dev` | Find table metadata |
-| `unverse query --table account --select accountid,name --filter-file filter.txt --env dev` | Run a paginated OData read |
+| `config` | `check` validates one local profile without contacting Dataverse |
+| `env` | `list` shows configured profiles offline; `whoami` reports organization, caller, and business unit; `doctor` reports configuration, token, and WhoAmI checks; `compare` compares two profiles |
+| `table`, `record` | `table list` finds table metadata; `record query <table>` runs a paginated OData read |
+| `schema` | `inspect`, `plan`, and `apply` for additive metadata |
+| `solution`, `app`, `flow`, `variable`, `connector`, `connref` | Read-only inventories; `solution show <solution-id>` and `connref show <reference-id>` inspect one item |
+| `user`, `role` | `user list`, `user show` (direct and team roles), and `role check` |
+| `deps` | `list`, `graph`, and `impact` dependency evidence |
+| `seed`, `transfer` | `plan` and `apply` for fixture data and Dataverse-to-Dataverse transfer |
+| `pg` | `export`, `import`, and `verify` for the PostgreSQL transfer |
 
-All diagnostic commands accept `--json`. `docs/cli.md` is generated from the
-implemented command definitions and is never maintained by hand.
+`env whoami` reports organization, caller, and business unit identifiers
+returned by Dataverse. `env doctor` does not probe table, role, or record
+access. Failed probes retain their command and selected environment and do
+not report successful coverage. `env list` prints profile names and normalized
+URLs only; credential variable names and values are never printed.
 
 ## 8. Results and exits
 
@@ -136,8 +138,11 @@ environment, normalized URL, caller when resolved, subject when applicable,
 status, data, evidence, a coverage object with limitations, and structured
 errors. The
 implemented configuration command emits the fields applicable to its coverage.
-With `--json`, stdout contains exactly one JSON document and all progress goes
-to stderr. Tokens and secrets never appear in either stream.
+With `--format json`, stdout contains exactly one compact JSON document and
+all progress goes to stderr. `--format human`, the default, prints the same
+envelope indented; an error then goes to stderr as one message. Commands offer
+only the formats they support: `csv` where the result has rows, and `html`,
+`mermaid`, and `svg` for `deps graph` and `deps impact`. Tokens and secrets never appear in either stream.
 
 | Exit | Meaning |
 | --- | --- |
@@ -188,7 +193,7 @@ names locally, case-insensitively. The authorized DEV service rejected
 search does not send that unsupported filter. Exact table resolution for
 record queries still uses the supported equality filter.
 
-`tables list` and `query` implement these reads. Query requires explicit
+`table list` and `record query` implement these reads. Query requires explicit
 selected columns and resolves the logical table through metadata before
 reading its entity set. A row cap with unread results produces status
 `inconclusive`, exit 7, and incomplete coverage. A failed page returns an
@@ -410,7 +415,7 @@ The public result exposes neither values nor hashes. Secret defaults/overrides
 are not fetched; secret and ambiguous values keep equality unknown. Only active
 overrides participate, and they take precedence over defaults, even when empty.
 
-`--csv` shares one implementation across commands. Results with one resource
+`--format csv` shares one implementation across commands. Results with one resource
 array expand into rows; other results retain nested JSON cells. All fields are
 quoted, records use CRLF, and formula-prefixed cells receive an apostrophe.
 JSON remains the lossless artifact format. CSV does not anonymize personal data.
@@ -534,3 +539,62 @@ API contracts: [dependency functions](https://learn.microsoft.com/en-us/power-pl
 [dependency entity](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/dependency),
 [connection references](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/connectionreference),
 and [connectors](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/connector).
+
+## 18. Command model
+
+Unverse commands follow one loop: observe, plan, apply. Observe commands
+read an environment and report evidence. Plan commands read and produce a
+reviewable document. Apply commands change an environment or a database and
+only from a reviewed plan. Help groups commands under OBSERVE, PLAN, APPLY,
+and OTHER for offline commands such as `config check`, `env list`, and `spec`.
+
+**One spec.** `packages/cli/src/commands.ts` is the single source of truth: a
+tree of resources and commands. The help, `docs/cli.md`, the argument parser,
+and `unverse spec` read it; nothing else lists a command or a flag. The shape
+follows ideas of the [usage spec](https://usage.jdx.dev): flagsets declared
+once and reused, positionals for one required identity, exactly-one-of groups,
+choices for values, and one document tools can read. Each command declares:
+
+- `effect`: `read`, `write`, or `destructive`. There is no default. Writing an
+  output the user asked for is still `read`. `schema apply`, `seed apply`,
+  `transfer apply`, and `pg import` are `write`; no command is `destructive`
+  yet. A command that is not `read` carries the `write` flagset, whose
+  `--confirm` is required.
+- flagsets: `target` (`--env`, `--config`), `output` (`--format`), `write`
+  (`--confirm`), and shared sets for search, publisher mapping, user selection,
+  and dependency scope. Flags specific to one command sit on the command.
+- positionals: one required resource identity, such as the table of
+  `record query <table>`.
+- groups: exactly-one-of constraints, such as the user selector and the role
+  selector. The parser enforces them; commands do not validate by hand.
+- outputs: the allowed `--format` values, default `human`.
+- exits: meanings that differ from the global table in §8, which stays.
+
+**What consumers may rely on.** A command whose effect is `read` never writes
+to Dataverse or PostgreSQL, so `unverse spec` lets an agent or a shell policy
+allowlist exactly those commands. A `write` command refuses to run without
+`--confirm`, before configuration is read.
+
+**Argv grammar.** Names are exact; there is no abbreviation. A value binds as
+`--name=value` or `--name value`; `--name=` binds the empty string and normal
+validation applies. A detached value cannot start with `-`, so a negative
+number is written `--limit=-1`. `--` ends flag parsing and the rest are
+positionals. `-h` and `--help` are the only help flags and there are no other
+short flags. An unknown command or flag, a flag that does not belong to the
+command, a missing required flag or positional, an extra positional, a group
+violation, and a value outside its choices are input errors with exit 2. A
+bare group such as `unverse table` prints its group help to standard error and
+exits 2.
+
+**Output selection.** `--format` picks one of `human`, `json`, `csv`, `html`,
+`mermaid`, and `svg` from the command's allowed list. `json` and `human`
+carry the versioned result of §8; the others are projections of it.
+
+**Deliberate deviations from usage.** There are no aliases and no
+deprecated names; a renamed command is gone. A repeated flag is an error
+rather than last-wins, because this tool writes to production. There is no
+flag abbreviation. There is no `jsonl` format because nothing streams.
+
+**Growth.** A new feature adds a resource, a section in an existing document,
+or a pipeline. It does not add a verb or another flow beside observe, plan,
+and apply.
