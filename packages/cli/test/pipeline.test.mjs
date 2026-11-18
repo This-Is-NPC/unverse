@@ -11,7 +11,7 @@ import {
   seedDesired,
   transferDesired,
 } from "@unverse/core";
-import { DataverseError, planDesired } from "@unverse/dataverse";
+import { applyDataPlan, DataverseError, planDesired } from "@unverse/dataverse";
 import transferData from "../../core/test/fixtures/data.json" with {
   type: "json",
 };
@@ -116,12 +116,13 @@ test("pipeline discovery finds ts and mjs files from a nested project directory"
         pipelines.map(({ name, origin }) => [name, origin]),
         [
           ["seed", "built-in"],
+          ["purge", "built-in"],
           ["transfer", "built-in"],
           ["alpha", "project"],
           ["beta", "project"],
         ],
       );
-      assert.equal(pipelines[2].description, "Synthetic pipeline.");
+      assert.equal(pipelines[3].description, "Synthetic pipeline.");
     },
   );
 });
@@ -599,4 +600,58 @@ test("--on-existing selects how the built-in pipelines treat differing rows", as
       assert.equal((await plan("--on-existing", "overwrite")).code, 2);
     },
   );
+});
+
+test("the purge pipeline plans a destructive plan that apply runs only with --destructive", async () => {
+  const fixture = await dataFixture();
+  const spec = seedSpec(fixture.model, fixture.mapping, transferData);
+  await applyDataPlan(
+    fixture.client,
+    await planDesired(
+      fixture.client,
+      await seedDesired(spec),
+      fixture.environment,
+    ),
+    fixture.environment,
+    true,
+  );
+  await inProject({ "seed.json": JSON.stringify(spec) }, async (root) => {
+    const invoke = (args) => run(args, root, () => fixture.client);
+    const planned = await invoke([
+      "pipeline",
+      "plan",
+      "purge",
+      "--env",
+      "dev",
+      "--format",
+      "json",
+      "--",
+      "--seed",
+      join(root, "seed.json"),
+    ]);
+    assert.equal(planned.code, 0, planned.errors.join(""));
+    const plan = JSON.parse(planned.output[0]).data;
+    assert.equal(plan.effect, "destructive");
+    assert.equal(plan.delete.length, 2);
+    writeFileSync(join(root, "purge-plan.json"), JSON.stringify(plan));
+    const apply = (...extra) =>
+      invoke([
+        "apply",
+        join(root, "purge-plan.json"),
+        "--env",
+        "dev",
+        "--confirm",
+        "--format",
+        "json",
+        ...extra,
+      ]);
+    const refused = await apply();
+    assert.equal(refused.code, 2);
+    assert.match(refused.output.join(""), /--destructive/);
+    assert.equal(fixture.rows.get("uv_parents").length, 1);
+    const applied = await apply("--destructive");
+    assert.equal(applied.code, 0, applied.errors.join(""));
+    assert.equal(fixture.rows.get("uv_parents").length, 0);
+    assert.equal(fixture.rows.get("uv_childs").length, 0);
+  });
 });

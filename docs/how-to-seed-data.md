@@ -162,6 +162,58 @@ in namespace `new` against rows created by namespace `old`; the model keys
 row would match two seed rows, the second is `blocked` and the plan cannot
 apply.
 
+## Purge a seed
+
+The `purge` pipeline deletes exactly the rows a seed derives. It takes the same
+`--seed` and has no other flags:
+
+```sh
+unverse pipeline plan purge --env dev --format json -- --seed seed.json > purge-plan.json
+```
+
+Its plan has `effect` `destructive` and lists what it would do (excerpt of the
+real output for the fixture seed; `delete` is ordered children before parents):
+
+```json
+{
+  "effect": "destructive",
+  "purge": true,
+  "delete": [
+    { "entity": "child", "id": "fd691aab-dff5-8946-b4b9-a7af020dccfd" },
+    { "entity": "parent", "id": "c2d5338b-6fb3-80bf-8c06-7c6f69f865ad" }
+  ],
+  "absent": [],
+  "blocked": []
+}
+```
+
+`absent` lists seed rows that are not in the target. Rows whose ID the seed does
+not derive are never listed, never matched by key, and never deleted. `apply`
+refuses the plan without `--destructive`:
+
+```sh
+unverse apply purge-plan.json --env dev --confirm --format json
+```
+
+```text
+The plan is destructive; apply it only with --destructive.
+```
+
+```sh
+unverse apply purge-plan.json --env dev --confirm --destructive --format json
+```
+
+The deletes go in one changeset, each as `DELETE` with `If-Match: *`. Afterwards
+Unverse reads the target again and reports `"verified": true` with
+`"remaining": []` only when none of the seed's IDs is left. Planning the purge
+again then lists every row under `absent` and `delete` is empty.
+
+A row of the seed that a row outside the seed references is `blocked` instead of
+deleted, because the relationship could cascade the delete to rows you did not
+name or make it fail. Remove or re-point the other row first. Relationships to
+tables the model does not describe are not visible to Unverse; check them
+yourself before purging.
+
 ## What can go wrong
 
 Apply rechecks the target identity and data fingerprint. New rows are created

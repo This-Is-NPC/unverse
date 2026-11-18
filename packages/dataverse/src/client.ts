@@ -128,11 +128,14 @@ export class DataverseClient {
   }
 
   async atomicBatch(
-    operations: readonly {
-      readonly path: string;
-      readonly kind: "create" | "update";
-      readonly body: Readonly<Record<string, unknown>>;
-    }[],
+    operations: readonly (
+      | {
+          readonly path: string;
+          readonly kind: "create" | "update";
+          readonly body: Readonly<Record<string, unknown>>;
+        }
+      | { readonly path: string; readonly kind: "delete" }
+    )[],
   ): Promise<void> {
     if (!operations.length) return;
     if (operations.length > 1000)
@@ -155,11 +158,15 @@ export class DataverseClient {
         "Content-Transfer-Encoding: binary",
         `Content-ID: ${index + 1}`,
         "",
-        `PATCH ${url} HTTP/1.1`,
-        "Content-Type: application/json",
-        operation.kind === "create" ? "If-None-Match: *" : "If-Match: *",
-        "",
-        JSON.stringify(operation.body),
+        ...(operation.kind === "delete"
+          ? [`DELETE ${url} HTTP/1.1`, "If-Match: *", "", ""]
+          : [
+              `PATCH ${url} HTTP/1.1`,
+              "Content-Type: application/json",
+              operation.kind === "create" ? "If-None-Match: *" : "If-Match: *",
+              "",
+              JSON.stringify(operation.body),
+            ]),
       ].join("\r\n");
     });
     const body = [

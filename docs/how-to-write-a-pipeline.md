@@ -22,8 +22,8 @@ would any script. Loading it runs its top-level code, so `pipeline list` and
 
 - Work in a project with `.unverse/config.json`. Pipelines live next to it, in
   `.unverse/pipelines/<name>.mjs` or `.unverse/pipelines/<name>.ts`. A name is
-  lowercase letters, digits, and hyphens. `seed` and `transfer` are built in
-  and cannot be reused.
+  lowercase letters, digits, and hyphens. `seed`, `purge`, and `transfer` are
+  built in and cannot be reused.
 - Node.js 24 runs `.ts` files directly by stripping the types, so use only
   type annotations and no enums. A `.mjs` file needs no types.
 - The [example](examples/families.mjs) used below creates parent rows, each
@@ -52,7 +52,9 @@ would any script. Loading it runs its top-level code, so `pipeline list` and
      described in [design §22](design.md#22-pipelines). The optional
      `onExisting` is `"block"` (the default: a target row that differs
      blocks the plan) or `"update"` (the plan updates only the differing
-     fields; an identical row is reported `unchanged`). Return it from `run`,
+     fields; an identical row is reported `unchanged`). A pipeline that returns
+     `purge: true` plans the deletion of its own rows instead; see
+     [purge a seed](how-to-seed-data.md#purge-a-seed). Return it from `run`,
      or take it from a flag such as the built-ins' `--on-existing`.
 
    `ctx` has five members and nothing else:
@@ -78,6 +80,11 @@ would any script. Loading it runs its top-level code, so `pipeline list` and
          "name": "seed",
          "origin": "built-in",
          "description": "Plan deterministic fixture rows from a versioned declarative seed with keyed rows; existing rows block or update."
+       },
+       {
+         "name": "purge",
+         "origin": "built-in",
+         "description": "Plan the deletion of exactly the rows a seed derives, children first; apply requires --destructive."
        },
        {
          "name": "transfer",

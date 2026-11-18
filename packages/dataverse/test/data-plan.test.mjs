@@ -551,3 +551,166 @@ test("alternate keys are tried in declaration order and the first hit wins", asy
   assert.equal(plan.matched[0].key, "k1name");
   assert.equal(plan.matched[0].targetId, fixture.ids.oldParent);
 });
+
+function renamedModel() {
+  return JSON.parse(
+    JSON.stringify(baseModel)
+      .replaceAll('"parent"', '"alpha"')
+      .replaceAll('"child"', '"omega"'),
+  );
+}
+
+/** Entities named so the parent sorts before its child. */
+async function purgeFixture({ apply = true } = {}) {
+  const fixture = await dataFixture(renamedModel());
+  const desired = await seedDesired(
+    seedSpec(
+      fixture.model,
+      fixture.mapping,
+      { alpha: data.parent, omega: data.child },
+      "purge",
+    ),
+  );
+  if (apply)
+    await applyDataPlan(
+      fixture.client,
+      await planDesired(fixture.client, desired, fixture.environment),
+      fixture.environment,
+      true,
+    );
+  const ids = {
+    alpha: await seedId("purge", "alpha", "row-0"),
+    omega: await seedId("purge", "omega", "row-0"),
+  };
+  const plan = () =>
+    planDesired(
+      fixture.client,
+      { ...desired, purge: true },
+      fixture.environment,
+    );
+  return { ...fixture, desired, ids, plan };
+}
+
+test("a purge plan is destructive and deletes only the rows the seed derives, children first", async () => {
+  const fixture = await purgeFixture();
+  fixture.rows.get("uv_alphas").push({
+    ...fixture.rows.get("uv_alphas")[0],
+    uv_alphaid: "00000000-0000-0000-0000-000000000777",
+    uv_name: "Not from the seed",
+  });
+  const plan = await fixture.plan();
+  assert.equal(plan.effect, "destructive");
+  assert.deepEqual(plan.delete, [
+    { entity: "omega", id: fixture.ids.omega },
+    { entity: "alpha", id: fixture.ids.alpha },
+  ]);
+  assert.deepEqual([plan.create, plan.update, plan.absent], [[], [], []]);
+  const report = await applyDataPlan(
+    fixture.client,
+    plan,
+    fixture.environment,
+    true,
+  );
+  assert.equal(report.verified, true);
+  assert.deepEqual(
+    operations(fixture.batches[1]).map(({ method, header, body }) => [
+      method,
+      header,
+      body,
+    ]),
+    [
+      ["DELETE", "If-Match", ""],
+      ["DELETE", "If-Match", ""],
+    ],
+  );
+  assert.match(
+    fixture.batches[1],
+    new RegExp(
+      `uv_omegas\\(${fixture.ids.omega}\\).*uv_alphas\\(${fixture.ids.alpha}\\)`,
+      "s",
+    ),
+  );
+  assert.deepEqual(
+    fixture.rows.get("uv_alphas").map((row) => row.uv_name),
+    ["Not from the seed"],
+  );
+  assert.equal(fixture.rows.get("uv_omegas").length, 0);
+});
+
+test("a purge reports rows that are already absent and writes nothing", async () => {
+  const fixture = await purgeFixture({ apply: false });
+  const plan = await fixture.plan();
+  assert.deepEqual(plan.delete, []);
+  assert.deepEqual(plan.absent, [
+    { entity: "alpha", id: fixture.ids.alpha },
+    { entity: "omega", id: fixture.ids.omega },
+  ]);
+  const report = await applyDataPlan(
+    fixture.client,
+    plan,
+    fixture.environment,
+    true,
+  );
+  assert.equal(report.verified, true);
+  assert.equal(report.checkpoint.state, "verified-resume");
+  assert.equal(fixture.batches.length, 0);
+});
+
+test("a purge never deletes a row that a row outside the seed references", async () => {
+  const fixture = await purgeFixture();
+  fixture.rows.get("uv_omegas").push({
+    uv_omegaid: "00000000-0000-0000-0000-000000000888",
+    uv_name: "Not from the seed",
+    _uv_parentid_value: fixture.ids.alpha,
+  });
+  const plan = await fixture.plan();
+  assert.equal(plan.blocked.length, 1);
+  assert.equal(plan.blocked[0].id, fixture.ids.alpha);
+  assert.match(plan.blocked[0].reason, /does not derive/);
+  await assert.rejects(
+    applyDataPlan(fixture.client, plan, fixture.environment, true),
+    /conflicting/,
+  );
+  assert.equal(fixture.batches.length, 1);
+});
+
+test("purge verification fails when a deleted row is still in the target", async () => {
+  const fixture = await purgeFixture();
+  const plan = await fixture.plan();
+  fixture.keepRowsOnDelete();
+  const report = await applyDataPlan(
+    fixture.client,
+    plan,
+    fixture.environment,
+    true,
+  );
+  assert.equal(report.verified, false);
+  assert.equal(report.remaining.length, 2);
+});
+
+test("a purge plan is rejected when the target changed after planning", async () => {
+  const fixture = await purgeFixture();
+  const plan = await fixture.plan();
+  fixture.rows.get("uv_alphas").push({
+    ...fixture.rows.get("uv_alphas")[0],
+    uv_alphaid: "00000000-0000-0000-0000-000000000777",
+    uv_name: "Added after planning",
+  });
+  await assert.rejects(
+    applyDataPlan(fixture.client, plan, fixture.environment, true),
+    /stale/,
+  );
+  assert.equal(fixture.batches.length, 1);
+});
+
+test("purge cannot combine with updates or a transfer source", async () => {
+  const fixture = await purgeFixture({ apply: false });
+  await assert.rejects(
+    planDesired(
+      fixture.client,
+      { ...fixture.desired, purge: true, onExisting: "update" },
+      fixture.environment,
+    ),
+    /purge/,
+  );
+});

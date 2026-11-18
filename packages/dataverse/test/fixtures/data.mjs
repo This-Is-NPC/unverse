@@ -14,6 +14,7 @@ export async function dataFixture(input = sourceModel) {
   const rows = new Map();
   const batches = [];
   let fail = false;
+  let keepOnDelete = false;
   const response = (value) => ({
     status: 200,
     headers: {},
@@ -63,20 +64,30 @@ export async function dataFixture(input = sourceModel) {
     batches.push(body);
     assert.match(headers["Content-Type"], /^multipart\/mixed;boundary=batch_/);
     const next = structuredClone(rows);
-    const parts = body.split(/(?=PATCH https:\/\/)/).slice(1);
+    const parts = body.split(/(?=(?:PATCH|DELETE) https:\/\/)/).slice(1);
     const statuses = [];
     for (const part of parts) {
       const match =
-        /^PATCH https:\/\/[^\r\n]+\/api\/data\/v9\.2\/([^()]+)\(([^)]+)\)/.exec(
+        /^(?:PATCH|DELETE) https:\/\/[^\r\n]+\/api\/data\/v9\.2\/([^()]+)\(([^)]+)\)/.exec(
           part,
         );
       assert.ok(match, part);
       const [, set, id] = match;
-      const value = JSON.parse(part.split("\r\n\r\n")[1].split("\r\n")[0]);
       const values = next.get(set) ?? [];
       const table = fixture.entities.get(set.slice(0, -1));
       const pk = table.metadata.PrimaryIdAttribute;
       const existing = values.find((row) => row[pk] === id);
+      if (part.startsWith("DELETE")) {
+        if (!existing) {
+          statuses.push(part.includes("If-Match: *") ? 404 : 204);
+          continue;
+        }
+        if (!keepOnDelete) values.splice(values.indexOf(existing), 1);
+        next.set(set, values);
+        statuses.push(fail ? 400 : 204);
+        continue;
+      }
+      const value = JSON.parse(part.split("\r\n\r\n")[1].split("\r\n")[0]);
       if (part.includes("If-None-Match: *")) {
         if (existing) {
           statuses.push(412);
@@ -149,6 +160,9 @@ export async function dataFixture(input = sourceModel) {
     batches,
     failBatch: () => {
       fail = true;
+    },
+    keepRowsOnDelete: () => {
+      keepOnDelete = true;
     },
   };
 }

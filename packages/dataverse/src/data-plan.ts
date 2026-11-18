@@ -36,6 +36,8 @@ export interface DataPlan {
   readonly policyFingerprint: string;
   readonly observedFingerprint: string;
   readonly onExisting: OnExisting;
+  /** True when the plan deletes the desired rows instead of writing them. */
+  readonly purge: boolean;
   readonly create: readonly { readonly entity: string; readonly id: string }[];
   readonly update: readonly {
     readonly entity: string;
@@ -45,6 +47,10 @@ export interface DataPlan {
   readonly unchanged: Readonly<Record<string, number>>;
   /** Desired rows that matched an existing target row by alternate key. */
   readonly matched: readonly KeyMatch[];
+  /** Rows to delete, children before parents. */
+  readonly delete: readonly { readonly entity: string; readonly id: string }[];
+  /** Rows a purge found already absent from the target. */
+  readonly absent: readonly { readonly entity: string; readonly id: string }[];
   readonly blocked: readonly {
     readonly entity: string;
     readonly id: string;
@@ -59,21 +65,40 @@ export async function planDesired(
   input: unknown,
   environment: SchemaEnvironment,
 ): Promise<DataPlan> {
-  const { manifest, mapping, purpose, basis, onExisting } =
+  const { manifest, mapping, purpose, basis, onExisting, purge } =
     await resolveDesired(input);
   if (purpose === "transfer") assertTransferSource(manifest, environment);
   return (
-    await planData(
-      client,
-      manifest,
-      mapping,
-      environment,
+    await planData(client, manifest, mapping, environment, {
       purpose,
-      basis,
+      policyFingerprint: basis,
       onExisting,
-    )
+      purge,
+    })
   ).plan;
 }
+
+interface Intent {
+  readonly purpose: "seed" | "transfer";
+  readonly policyFingerprint: string;
+  readonly onExisting: OnExisting;
+  readonly purge: boolean;
+}
+
+type Dataset = TransferManifest["data"];
+type Outcome = Pick<
+  DataPlan,
+  | "create"
+  | "update"
+  | "unchanged"
+  | "matched"
+  | "delete"
+  | "absent"
+  | "blocked"
+> & {
+  readonly operations: number;
+  readonly rows: Readonly<Record<string, readonly Record<string, unknown>[]>>;
+};
 
 type Change = DataPlan["update"][number];
 type BatchOperation = Parameters<DataverseClient["atomicBatch"]>[0][number];
@@ -99,26 +124,13 @@ function physicalValue(column: Column, value: unknown): unknown {
   return value !== null && column.type === "decimal" ? Number(value) : value;
 }
 
-async function planData(
-  client: DataverseClient,
-  manifest: TransferManifest,
-  mapping: DataverseMapping,
-  environment: SchemaEnvironment,
-  purpose: "seed" | "transfer",
-  policyFingerprint: string,
+function planWrites(
+  model: TransferManifest["model"],
+  desired: Dataset,
+  target: Dataset,
   onExisting: OnExisting,
-) {
-  const target = await exportTransfer(
-    client,
-    manifest.model,
-    mapping,
-    environment,
-  );
-  const { rows, matched, ambiguous } = matchByKeys(
-    manifest.model,
-    manifest.data,
-    target.data,
-  );
+): Outcome {
+  const { rows, matched, ambiguous } = matchByKeys(model, desired, target);
   const create: { entity: string; id: string }[] = [];
   const update: Change[] = [];
   const unchanged: Record<string, number> = {};
@@ -126,9 +138,9 @@ async function planData(
     ...ambiguous,
   ];
   let operations = 0;
-  for (const entity of manifest.model.entities) {
+  for (const entity of model.entities) {
     const current = new Map(
-      (target.data[entity.name] ?? []).map((row) => [
+      (target[entity.name] ?? []).map((row) => [
         String(row[entity.primaryKey]),
         row,
       ]),
@@ -175,6 +187,104 @@ async function planData(
         });
     }
   }
+  return {
+    create,
+    update,
+    unchanged,
+    matched,
+    delete: [],
+    absent: [],
+    blocked,
+    operations,
+    rows,
+  };
+}
+
+/** Deletes exactly the desired IDs that exist, children before parents. */
+function planPurge(
+  model: TransferManifest["model"],
+  desired: Dataset,
+  target: Dataset,
+): Outcome {
+  const present = new Map<string, Record<string, unknown>>();
+  for (const entity of model.entities)
+    for (const row of target[entity.name] ?? [])
+      present.set(`${entity.name}/${String(row[entity.primaryKey])}`, row);
+  const doomed: { entity: string; id: string }[] = [];
+  const absent: { entity: string; id: string }[] = [];
+  for (const entity of model.entities)
+    for (const row of desired[entity.name] ?? []) {
+      const id = guid(String(row[entity.primaryKey]));
+      (present.has(`${entity.name}/${id}`) ? doomed : absent).push({
+        entity: entity.name,
+        id,
+      });
+    }
+  const slots = new Set(doomed.map(({ entity, id }) => `${entity}/${id}`));
+  // Referencing rows keyed by the slot they reference.
+  const referrers = new Map<string, string[]>();
+  for (const entity of model.entities)
+    for (const row of target[entity.name] ?? [])
+      for (const column of entity.columns) {
+        const value = row[column.name];
+        if (column.references === undefined || value === null) continue;
+        const referenced = `${column.references}/${String(value)}`;
+        referrers.set(referenced, [
+          ...(referrers.get(referenced) ?? []),
+          `${entity.name}/${String(row[entity.primaryKey])}`,
+        ]);
+      }
+  const blocked = doomed.flatMap(({ entity, id }) =>
+    (referrers.get(`${entity}/${id}`) ?? [])
+      .filter((referrer) => !slots.has(referrer))
+      .map((referrer) => ({
+        entity,
+        id,
+        reason: `The row is referenced by ${referrer}, which the seed does not derive.`,
+      })),
+  );
+  const ordered: typeof doomed = [];
+  for (let rest = doomed; rest.length > 0; ) {
+    const left = new Set(rest.map(({ entity, id }) => `${entity}/${id}`));
+    const ready = rest.filter(
+      ({ entity, id }) =>
+        !(referrers.get(`${entity}/${id}`) ?? []).some(
+          (referrer) => left.has(referrer) && referrer !== `${entity}/${id}`,
+        ),
+    );
+    const next = ready.length > 0 ? ready : rest;
+    ordered.push(...next);
+    rest = rest.filter((row) => !next.includes(row));
+  }
+  return {
+    create: [],
+    update: [],
+    unchanged: {},
+    matched: [],
+    delete: ordered,
+    absent,
+    blocked,
+    operations: ordered.length,
+    rows: desired,
+  };
+}
+
+async function planData(
+  client: DataverseClient,
+  manifest: TransferManifest,
+  mapping: DataverseMapping,
+  environment: SchemaEnvironment,
+  intent: Intent,
+) {
+  const target = await exportTransfer(
+    client,
+    manifest.model,
+    mapping,
+    environment,
+  );
+  const { operations, rows, ...changes } = intent.purge
+    ? planPurge(manifest.model, manifest.data, target.data)
+    : planWrites(manifest.model, manifest.data, target.data, intent.onExisting);
   if (operations > 1000)
     throw new DataverseError(
       "unsupported",
@@ -183,24 +293,23 @@ async function planData(
   const body = {
     dataPlanVersion: 1 as const,
     kind: "data" as const,
-    effect: "write" as const,
-    purpose,
+    effect: intent.purge ? ("destructive" as const) : ("write" as const),
+    purpose: intent.purpose,
     environment,
     mapping,
     manifest,
-    policyFingerprint,
+    policyFingerprint: intent.policyFingerprint,
     observedFingerprint: target.fingerprint,
-    onExisting,
-    create,
-    update,
-    unchanged,
-    matched,
-    blocked,
+    onExisting: intent.onExisting,
+    purge: intent.purge,
+    ...changes,
     limitations: [
       ...lookupLimitations(manifest.model),
-      onExisting === "update"
-        ? "Atomic changeset of creates and updates; an update sends only the differing modeled fields, never creates, and deletes nothing."
-        : "Create-only atomic changeset; existing differing rows and overwrites are blocked.",
+      intent.purge
+        ? "Atomic changeset that deletes only the rows the seed derives, children first; absent rows are reported, nothing else is deleted."
+        : intent.onExisting === "update"
+          ? "Atomic changeset of creates and updates; an update sends only the differing modeled fields, never creates, and deletes nothing."
+          : "Create-only atomic changeset; existing differing rows and overwrites are blocked.",
       "The dataset is bounded to 1000 operations and 4 MB. Resume means re-plan and verify, not per-row checkpoints.",
       "A lost response has an unknown outcome until inspection. No write is retried automatically.",
       "A field copy policy is an explicit authorization, not automatic detection of personal or sensitive data.",
@@ -220,6 +329,7 @@ async function readDataPlan(
     value.kind !== "data" ||
     !["seed", "transfer"].includes(String(value.purpose)) ||
     !["block", "update"].includes(String(value.onExisting)) ||
+    typeof value.purge !== "boolean" ||
     canonical(value.environment) !== canonical(environment)
   )
     throw new DataverseError(
@@ -238,9 +348,12 @@ async function readDataPlan(
     manifest,
     mapping,
     environment,
-    value.purpose as "seed" | "transfer",
-    String(value.policyFingerprint),
-    value.onExisting as OnExisting,
+    {
+      purpose: value.purpose as "seed" | "transfer",
+      policyFingerprint: String(value.policyFingerprint),
+      onExisting: value.onExisting as OnExisting,
+      purge: value.purge,
+    },
   );
   return { manifest, mapping, expected, rows };
 }
@@ -256,9 +369,11 @@ export async function verifyDataPlan(
     satisfied:
       expected.create.length === 0 &&
       expected.update.length === 0 &&
+      expected.delete.length === 0 &&
       expected.blocked.length === 0,
     create: expected.create,
     update: expected.update,
+    delete: expected.delete,
     blocked: expected.blocked,
   };
 }
@@ -284,15 +399,16 @@ export async function applyDataPlan(
       "invalid-input",
       "Data plan contains conflicting existing rows; no writes were issued.",
     );
-  if (expected.create.length === 0 && expected.update.length === 0)
-    return verifyData(
-      client,
-      manifest,
-      rows,
-      mapping,
-      environment,
-      "verified-resume",
-    );
+  const verify = (state: string) =>
+    expected.purge
+      ? verifyAbsent(client, manifest, mapping, environment, state)
+      : verifyData(client, manifest, rows, mapping, environment, state);
+  if (
+    expected.create.length === 0 &&
+    expected.update.length === 0 &&
+    expected.delete.length === 0
+  )
+    return verify("verified-resume");
   if (canonical(expected) !== canonical(input))
     throw new DataverseError(
       "invalid-input",
@@ -329,10 +445,14 @@ export async function applyDataPlan(
   const creates: BatchOperation[] = [];
   const updates: BatchOperation[] = [];
   const links: BatchOperation[] = [];
+  const deletes: BatchOperation[] = expected.delete.map(({ entity, id }) => ({
+    path: `${sets.get(entity)}(${guid(id)})`,
+    kind: "delete",
+  }));
   const changes = new Map(
     expected.update.map((change) => [`${change.entity}/${change.id}`, change]),
   );
-  for (const entity of manifest.model.entities) {
+  for (const entity of expected.purge ? [] : manifest.model.entities) {
     const navigations = new Map<string, string>();
     for (const column of entity.columns)
       if (column.references !== undefined || column.externalReference) {
@@ -410,8 +530,44 @@ export async function applyDataPlan(
         updates.push({ path, kind: "update", body: values });
     }
   }
-  await client.atomicBatch([...creates, ...updates, ...links]);
-  return verifyData(client, manifest, rows, mapping, environment, "committed");
+  await client.atomicBatch([...creates, ...updates, ...links, ...deletes]);
+  return verify("committed");
+}
+
+async function verifyAbsent(
+  client: DataverseClient,
+  manifest: TransferManifest,
+  mapping: DataverseMapping,
+  environment: SchemaEnvironment,
+  checkpoint: string,
+) {
+  const target = await exportTransfer(
+    client,
+    manifest.model,
+    mapping,
+    environment,
+  );
+  const remaining = manifest.model.entities.flatMap((entity) => {
+    const ids = new Set(
+      (manifest.data[entity.name] ?? []).map((row) => row[entity.primaryKey]),
+    );
+    return (target.data[entity.name] ?? [])
+      .filter((row) => ids.has(row[entity.primaryKey]))
+      .map((row) => ({
+        entity: entity.name,
+        id: String(row[entity.primaryKey]),
+      }));
+  });
+  return {
+    verified: remaining.length === 0,
+    remaining,
+    target: environment,
+    checkpoint: {
+      unit: "atomic-changeset",
+      fingerprint: manifest.fingerprint,
+      state: checkpoint,
+    },
+  };
 }
 
 async function verifyData(

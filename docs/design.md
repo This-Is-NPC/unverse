@@ -24,9 +24,9 @@ checks for automation.
 It does not provide a web application, long-running server, complete Power
 Apps replacement, continuous synchronization, arbitrary SQL translation,
 automatic impersonation, role assignment to users, effective access checks, or
-a complete Dataverse migration. Schema changes are additive; the only
-destructive schema change is an explicit `schema plan --prune` applied with
-`--destructive` (§14), and entities are never deleted. Declarative provisioning and verified
+a complete Dataverse migration. Schema changes are additive; the destructive
+operations are an explicit `schema plan --prune` (§14) and the `purge`
+pipeline (§16), each applied with `--destructive`, and entities are never deleted. Declarative provisioning and verified
 PostgreSQL transfer are later milestones. Security role provisioning (§14)
 and assigning existing roles to existing teams through a reviewed plan (§21)
 are in scope; assigning a role to a user comes later.
@@ -390,8 +390,8 @@ fingerprints it carries `kind` (`schema`, `data` or `access`) and `effect` (`wri
 plan whose kind or effect was edited is rejected as modified. Schema plans and
 data plans (pipelines, §§16 and 22) and access plans (§21) are the three
 kinds; every plan written today
-has effect `write`, except a schema plan made with `--prune`, which has effect
-`destructive`. `apply` refuses a destructive plan unless the invocation also
+has effect `write`, except a schema plan made with `--prune` and a data plan
+made by `purge`, which have effect `destructive`. `apply` refuses a destructive plan unless the invocation also
 passes `--destructive`; the check runs before the first request.
 
 `schema plan --prune` makes the model authoritative for what the publisher
@@ -738,12 +738,24 @@ plan lists every match as `matched` (`entity`, desired `id`, `targetId`, `key`);
 Text keys compare exactly. The target export already rejects two rows with one
 key tuple.
 
-All creates, then updates, then link updates go in one bounded multipart
+**Purge.** Desired data with `purge: true` (seed data only, never with a
+source or `onExisting: update`) plans deletion instead of writing. The plan
+lists `delete` for exactly the desired IDs that exist in the target and `absent`
+for those that do not; it has `effect: "destructive"`, so `apply` requires
+`--destructive` (§14). Nothing is deleted whose ID the desired data does not
+contain, and nothing is matched by key. `delete` is ordered children before
+parents by the references the target rows hold, including self-references; a
+cycle is kept in model order. A row that a target row outside the desired data
+references is `blocked`, because deleting it could cascade or fail by the
+relationship's behaviour. After the changeset, verification exports the
+target and proves that none of the desired IDs remains.
+
+All creates, then updates, then link updates, then deletes go in one bounded multipart
 changeset. Conditional create requests use `If-None-Match: *`; update requests
 use `If-Match: *`, so an update can never create a row and a create can never
 overwrite one. An update names only rows the plan lists and only the differing
 fields; a changed reference is a link update, and a reference that became null
-is sent as a null binding. Every operation must
+is sent as a null binding. Deletes use `DELETE` with `If-Match: *`. Every operation must
 confirm success before post-write equivalence can report success. The unit of
 commit/resume is one changeset (at most 1000 operations and a 4 MB request), not
 a row checkpoint. A lost response remains unknown until inspection; re-plan
@@ -1141,7 +1153,7 @@ file's directory). Node 24 strips erasable TypeScript natively, so a `.ts`
 file needs no build step and may not use enums or other non-erasable syntax.
 A name is lowercase letters, digits, and hyphens. Both extensions for one
 name, an invalid name, and a name that is a built-in are errors at discovery;
-`seed` and `transfer` cannot be shadowed. A path argument
+`seed`, `purge`, and `transfer` cannot be shadowed. A path argument
 (`pipeline plan ./one-off.mjs`) runs that file directly.
 
 **The module.** The default export is `{ description, params?, run }`.
@@ -1156,6 +1168,7 @@ interface DesiredData {
   source?: { environment: SchemaEnvironment; mapping: DataverseMapping };
   basis?: string;
   onExisting?: "block" | "update";                   // default "block" (§16)
+  purge?: boolean;                                   // delete the rows instead (§16)
 }
 ```
 
@@ -1166,7 +1179,8 @@ interface DesiredData {
 from the source. `basis` is what the plan fingerprints as the input that
 determined the rows; it defaults to the dataset fingerprint. The plan is
 bound to the `--env` target. `onExisting` selects between blocking and updating
-a differing row (§16); an identical row is reported unchanged. A desired row
+a differing row (§16); an identical row is reported unchanged. `purge: true`
+turns the plan into a destructive deletion of the desired IDs (§16). A desired row
 whose ID is absent may match a target row by alternate key (§16), and the
 plan's `matched` list reports the ID mapping.
 
@@ -1198,8 +1212,9 @@ without a request.
 `.`, `_`, `-`, not ending in `.json`) resolves to `.unverse/seeds/<name>.json`
 and anything else is a file path used as is. `transfer` takes
 `--mapping-file`, `--manifest-file`, and `--policy-file`. Both accept
-`--on-existing block|update`; without it the desired data keeps `block`. Both
-call the same `planDesired` as a user pipeline.
+`--on-existing block|update`; without it the desired data keeps `block`.
+`purge` takes the same `--seed` and returns that seed's desired data with
+`purge: true`. All three call the same `planDesired` as a user pipeline.
 
 **Errors.** A bad pipeline file, bad flags, an invalid desired dataset, and an
 exception thrown by the pipeline's own code (reported as `Pipeline <name>

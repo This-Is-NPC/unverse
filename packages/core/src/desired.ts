@@ -29,6 +29,8 @@ export interface DesiredData {
   readonly basis?: string;
   /** What to do with a target row that differs; defaults to blocking. */
   readonly onExisting?: OnExisting;
+  /** Plan the deletion of exactly these rows instead of writing them. */
+  readonly purge?: boolean;
 }
 
 export type OnExisting = "block" | "update";
@@ -39,6 +41,7 @@ export interface ResolvedData {
   readonly purpose: "seed" | "transfer";
   readonly basis: string;
   readonly onExisting: OnExisting;
+  readonly purge: boolean;
 }
 
 const desiredKeys = [
@@ -48,6 +51,7 @@ const desiredKeys = [
   "source",
   "basis",
   "onExisting",
+  "purge",
 ];
 
 export async function resolveDesired(input: unknown): Promise<ResolvedData> {
@@ -59,7 +63,7 @@ export async function resolveDesired(input: unknown): Promise<ResolvedData> {
   )
     throw new SchemaError(
       "invalid-input",
-      "Desired data has a model, mapping, data, and optional source, basis, and onExisting.",
+      "Desired data has a model, mapping, data, and optional source, basis, onExisting, and purge.",
     );
   if (
     desired.onExisting !== undefined &&
@@ -69,6 +73,15 @@ export async function resolveDesired(input: unknown): Promise<ResolvedData> {
     throw new SchemaError(
       "invalid-input",
       "onExisting must be block or update.",
+    );
+  const purge = desired.purge ?? false;
+  if (
+    typeof purge !== "boolean" ||
+    (purge && (desired.source !== undefined || desired.onExisting === "update"))
+  )
+    throw new SchemaError(
+      "invalid-input",
+      "purge is a boolean that applies to seed data without source or onExisting update.",
     );
   const model = parseModel(desired.model);
   const mapping = parseMapping(desired.mapping);
@@ -98,6 +111,7 @@ export async function resolveDesired(input: unknown): Promise<ResolvedData> {
     purpose: desired.source === undefined ? "seed" : "transfer",
     basis,
     onExisting: desired.onExisting ?? "block",
+    purge,
   };
 }
 

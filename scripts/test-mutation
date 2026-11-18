@@ -227,7 +227,7 @@ mutations.push(
   ["update-stale", "dataverse/data-plan.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "an update plan is rejected when the target changed after planning", "data-plan"],
   ["update-default-block", "dataverse/data-plan.js", 'else if (onExisting === "update") {', "else if (true) {", "dataverse", "an existing differing row blocks by default and updates only on request", "data-plan"],
   ["update-unchanged-count", "dataverse/data-plan.js", "(unchanged[entity.name] ?? 0) + 1", "(unchanged[entity.name] ?? 0)", "dataverse", "re-running an applied seed with onExisting update reports every row unchanged", "data-plan"],
-  ["update-order", "dataverse/data-plan.js", "[...creates, ...updates, ...links]", "[...creates, ...links, ...updates]", "dataverse", "a changeset runs creates, then updates, then link updates", "data-plan"],
+  ["update-order", "dataverse/data-plan.js", "[...creates, ...updates, ...links, ...deletes]", "[...creates, ...links, ...updates, ...deletes]", "dataverse", "a changeset runs creates, then updates, then link updates", "data-plan"],
   ["on-existing-flag", "cli/builtins.js", 'params["on-existing"] === undefined', "true", "cli", "--on-existing selects how the built-in pipelines treat differing rows", "pipeline"],
 );
 
@@ -237,6 +237,17 @@ mutations.push(
   ["key-differing-blocks", "dataverse/data-plan.js", 'else if (onExisting === "update") {', "else if (true) {", "dataverse", "a key-matched row that differs blocks unless onExisting is update", "data-plan"],
   ["key-claimed", "dataverse/data-match.js", "if (claimed.has(slot(entity.name, targetId)))", "if (false)", "dataverse", "a target row claimed by two desired rows blocks the second", "data-plan"],
   ["key-order", "dataverse/data-match.js", "for (const key of entity.keys ?? []) {", "for (const key of [...(entity.keys ?? [])].reverse()) {", "dataverse", "alternate keys are tried in declaration order and the first hit wins", "data-plan"],
+);
+
+mutations.push(
+  ["purge-underived", "dataverse/data-plan.js", "for (const row of desired[entity.name] ?? []) {", "for (const row of target[entity.name] ?? []) {", "dataverse", "a purge plan is destructive and deletes only the rows the seed derives, children first", "data-plan"],
+  ["purge-order", "dataverse/data-plan.js", "const next = ready.length > 0 ? ready : rest;", "const next = rest;", "dataverse", "a purge plan is destructive and deletes only the rows the seed derives, children first", "data-plan"],
+  ["purge-write-effect", "dataverse/data-plan.js", 'effect: intent.purge ? "destructive" : "write",', 'effect: "write",', "cli", "the purge pipeline plans a destructive plan that apply runs only with --destructive", "pipeline"],
+  ["purge-if-match", "dataverse/client.js", '[`DELETE ${url} HTTP/1.1`, "If-Match: *", "", ""]', '[`DELETE ${url} HTTP/1.1`, "X-Dropped: *", "", ""]', "dataverse", "a purge plan is destructive and deletes only the rows the seed derives, children first", "data-plan"],
+  ["purge-verify-absence", "dataverse/data-plan.js", "verified: remaining.length === 0,", "verified: true,", "dataverse", "purge verification fails when a deleted row is still in the target", "data-plan"],
+  ["purge-referenced", "dataverse/data-plan.js", ".filter((referrer) => !slots.has(referrer))", ".filter(() => false)", "dataverse", "a purge never deletes a row that a row outside the seed references", "data-plan"],
+  ["purge-stale", "dataverse/data-plan.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "a purge plan is rejected when the target changed after planning", "data-plan"],
+  ["purge-combination", "core/desired.js", '(purge && (desired.source !== undefined || desired.onExisting === "update"))', "false", "dataverse", "purge cannot combine with updates or a transfer source", "data-plan"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

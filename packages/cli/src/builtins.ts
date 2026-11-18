@@ -30,33 +30,37 @@ const onExisting = (params: PipelineContext["params"]) =>
     ? {}
     : { onExisting: params["on-existing"] as "block" | "update" };
 
+const seedFlag: FlagSpec = {
+  name: "--seed",
+  value: "name|path",
+  summary:
+    "Read a seed: a name resolves to .unverse/seeds/<name>.json, anything else is a file path.",
+  required: true,
+};
+
 export function builtinPipelines(
   readFile: (path: string) => Promise<string>,
   root: string,
 ): Readonly<Record<string, Pipeline>> {
+  const readSeed = async (context: PipelineContext) =>
+    seedDesired(
+      await readDocument(readFile, seedPath(root, String(context.params.seed))),
+    );
   return {
     seed: {
       description:
         "Plan deterministic fixture rows from a versioned declarative seed with keyed rows; existing rows block or update.",
-      params: [
-        {
-          name: "--seed",
-          value: "name|path",
-          summary:
-            "Read a seed: a name resolves to .unverse/seeds/<name>.json, anything else is a file path.",
-          required: true,
-        },
-        onExistingFlag,
-      ],
+      params: [seedFlag, onExistingFlag],
       run: async (context) => ({
-        ...(await seedDesired(
-          await readDocument(
-            readFile,
-            seedPath(root, String(context.params.seed)),
-          ),
-        )),
+        ...(await readSeed(context)),
         ...onExisting(context.params),
       }),
+    },
+    purge: {
+      description:
+        "Plan the deletion of exactly the rows a seed derives, children first; apply requires --destructive.",
+      params: [seedFlag],
+      run: async (context) => ({ ...(await readSeed(context)), purge: true }),
     },
     transfer: {
       description:

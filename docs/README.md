@@ -50,6 +50,7 @@ tarballs; no npm publication is implied.
 | Which environment settings differ? | [Compare environments](how-to-compare-environments.md) |
 | How do I export results for a spreadsheet? | [CSV output](how-to-export-csv.md) |
 | How do I seed reproducible development data? | [Seed data](how-to-seed-data.md) |
+| How do I re-run, update or purge a seed? | [Seed data](how-to-seed-data.md#re-run-or-update-a-seed) |
 | How do I give a team its security roles? | [Assign team roles](how-to-assign-team-roles.md) |
 | How do I transfer without clearing the destination? | [Dataverse transfer](how-to-transfer-dataverse.md) |
 | How do I plan data from my own code? | [Write a pipeline](how-to-write-a-pipeline.md) |

@@ -76,7 +76,8 @@ existing application tables.
 authenticated caller's roles, and export [spreadsheet-safe CSV](docs/how-to-export-csv.md).
 [Dataverse-to-Dataverse data plans](docs/how-to-transfer-dataverse.md) require
 an explicit field-copy policy and never clear target rows; they update an
-existing row only when you ask, and only its differing fields.
+existing row only when you ask, and only its differing fields. The `purge`
+pipeline deletes exactly the rows a seed derives, and only with `--destructive`.
 
 **Your own pipelines.** Keep data pipelines in your repository under
 `.unverse/pipelines`; Unverse runs them with a read-only context and turns what
@@ -134,7 +135,7 @@ See the generated [CLI reference](docs/cli.md) for arguments.
 ## What it does not do
 
 This candidate does not provide a TUI, auditing, implicit impersonation,
-effective-record-access checks, SQL, entity deletion, purge,
+effective-record-access checks, SQL, entity deletion,
 deduplication, Power BI inventory, reverse PostgreSQL-to-Dataverse import, or
 continuous synchronization. No SLB application schemas or business pipelines
 are bundled.
