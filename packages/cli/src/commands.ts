@@ -837,6 +837,15 @@ export const rootCommands: readonly CommandSpec[] = [
     flagsets: ["output"],
     outputs: plain,
   },
+  {
+    name: "init",
+    stage: "other",
+    effect: "write",
+    summary:
+      "Create .unverse/config.json from a template in the current directory.",
+    flagsets: ["output", "write"],
+    outputs: plain,
+  },
 ];
 
 export const routes: readonly Route[] = [

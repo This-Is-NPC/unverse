@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -40,6 +47,10 @@ async function run(args, cwd, env = {}) {
   const errors = [];
   const code = await runCli(args, {
     readFile: (path) => readFile(path, "utf8"),
+    writeFile: async (path, content) => {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content, { flag: "wx" });
+    },
     fileExists: (path) =>
       access(path).then(
         () => true,
@@ -163,10 +174,50 @@ test("a command that needs an environment exits two without one", async () => {
   });
 });
 
-test("a missing configuration exits two naming the search", async () => {
+test("a missing configuration exits two naming the search and unverse init", async () => {
   await inProject(async (root) => {
     const { code, errors } = await run(["env", "list"], root);
     assert.equal(code, 2);
     assert.match(errors, /No \.unverse\/config\.json found from /);
+    assert.match(errors, /unverse init/);
+  });
+});
+
+test("init creates the template and nothing else", async () => {
+  await inProject(async (root) => {
+    const { code, document } = await run(
+      ["init", "--confirm", "--format", "json"],
+      root,
+    );
+    assert.equal(code, 0);
+    assert.equal(document.data.created, true);
+    assert.deepEqual(readdirSync(root), [".unverse"]);
+    assert.deepEqual(readdirSync(join(root, ".unverse")), ["config.json"]);
+    const template = JSON.parse(
+      readFileSync(join(root, ".unverse", "config.json"), "utf8"),
+    );
+    assert.equal(template.configVersion, 1);
+    const checked = await run([...check, "--env", "dev"], root);
+    assert.equal(checked.code, 0);
+  });
+});
+
+test("init is a no-op when the identical template exists", async () => {
+  await inProject(async (root) => {
+    await run(["init", "--confirm"], root);
+    const again = await run(["init", "--confirm", "--format", "json"], root);
+    assert.equal(again.code, 0);
+    assert.equal(again.document.data.created, false);
+  });
+});
+
+test("init refuses to overwrite a different file", async () => {
+  await inProject(async (root) => {
+    const path = writeConfig(root, "mine");
+    const before = readFileSync(path, "utf8");
+    const { code, errors } = await run(["init", "--confirm"], root);
+    assert.equal(code, 2);
+    assert.match(errors, /does not overwrite/);
+    assert.equal(readFileSync(path, "utf8"), before);
   });
 });

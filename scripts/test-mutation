@@ -172,6 +172,7 @@ mutations.push(
 mutations.push(
   ["discovery-walk", "cli/project.js", "if (parent === directory)", "if (true)", "cli", "discovers .unverse/config.json from a nested directory", "project"],
   ["environment-precedence", "cli/project.js", 'const flag = flags.get("--env");', 'const flag = variable(runtime, "UNVERSE_ENV") ?? flags.get("--env");', "cli", "--env beats UNVERSE_ENV and records its origin", "project"],
+  ["init-overwrite", "cli/run.js", "if (exists && (await runtime.readFile(path)) !== configTemplate)", "if (false)", "cli", "init refuses to overwrite a different file", "project"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

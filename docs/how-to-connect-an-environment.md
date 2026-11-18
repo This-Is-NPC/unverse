@@ -22,9 +22,19 @@ probe, not for validating table or record permissions.
 
 ## Steps
 
-1. In the root of your project, create `.unverse/config.json`. `your-org`
-   in `url` is a placeholder for your Dataverse HTTPS origin, and the three
-   `...Env` fields name the variables of step 2:
+1. In the root of your project, create the configuration. `init` writes
+   `.unverse/config.json` from a template and nothing else:
+
+   ```sh
+   unverse init --confirm --format json
+   ```
+
+   It prints `data.created: true` and the path it wrote. Run again with the
+   same template in place, it prints `data.created: false` and changes
+   nothing. If the file exists and differs from the template, it exits 2 and
+   does not overwrite it. Edit the file: `your-org` in `url` is a
+   placeholder for your Dataverse HTTPS origin, and the three `...Env` fields
+   name the variables of step 2.
 
    ```json
    {

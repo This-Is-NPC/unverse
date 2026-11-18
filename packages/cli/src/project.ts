@@ -41,7 +41,7 @@ export async function resolveConfigPath(
     directory = parent;
   }
   throw new InputError(
-    `No ${configFile} found from ${runtime.cwd} up to the filesystem root. Create one, or pass --config or set UNVERSE_CONFIG.`,
+    `No ${configFile} found from ${runtime.cwd} up to the filesystem root. Run unverse init to create one here, or pass --config or set UNVERSE_CONFIG.`,
   );
 }
 
@@ -57,3 +57,19 @@ export function resolveEnvironmentName(
     "An environment is required: pass --env or set UNVERSE_ENV.",
   );
 }
+
+export const configTemplate = `${JSON.stringify(
+  {
+    configVersion: 1,
+    environments: {
+      dev: {
+        url: "https://your-org.crm.dynamics.com",
+        tenantIdEnv: "UNVERSE_TENANT_ID",
+        clientIdEnv: "UNVERSE_CLIENT_ID",
+        clientSecretEnv: "UNVERSE_CLIENT_SECRET",
+      },
+    },
+  },
+  null,
+  2,
+)}\n`;

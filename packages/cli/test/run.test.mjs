@@ -211,6 +211,9 @@ test("JSON parse errors remain JSON even when --format json follows the bad flag
 function runtime(readConfig, output = [], errors = [], secrets = [], whoAmI) {
   return {
     readFile: async () => readConfig(),
+    writeFile: async () => {
+      throw new Error("unexpected write");
+    },
     fileExists: async () => true,
     cwd: "/work/project",
     env: {},

@@ -108,7 +108,9 @@ Configuration is `.unverse/config.json`, found by walking up from the current
 directory to the filesystem root; the first hit wins, so the nearest project
 decides. There is no other default file name. The path is chosen by, in order,
 `--config <path>`, the `UNVERSE_CONFIG` variable, and that discovery. When none
-yields a file the command exits 2 and names where it searched.
+yields a file the command exits 2 and names where it searched and `unverse
+init`. `init` writes the template into the current directory, refuses to
+overwrite a different file, and is a no-op when the identical template exists.
 
 Environment operations require an explicit environment name: `--env`, or the
 `UNVERSE_ENV` variable, with the flag winning. The variable is an explicit
@@ -135,6 +137,7 @@ Every command is `unverse <group> <command>` or the root command
 | Group | Commands |
 | --- | --- |
 | `config` | `check` validates one local profile without contacting Dataverse |
+| `init` | Creates `.unverse/config.json` from a template; writes nothing else |
 | `env` | `list` shows configured profiles offline; `whoami` reports organization, caller, and business unit; `doctor` reports configuration, token, and WhoAmI checks; `compare` compares two profiles |
 | `table`, `record` | `table list` finds table metadata; `record query <table>` runs a paginated OData read |
 | `schema` | `inspect` and `plan` for additive metadata |
@@ -748,8 +751,8 @@ once and reused, positionals for one required identity, exactly-one-of groups,
 choices for values, and one document tools can read. Each command declares:
 
 - `effect`: `read`, `write`, or `destructive`. There is no default. Writing an
-  output the user asked for is still `read`. `apply` and `pg import` are
-  `write`; `verify` is `read`. The effect of an `apply` invocation is the
+  output the user asked for is still `read`. `init`, `apply` and `pg import`
+  are `write`; `verify` is `read`. The effect of an `apply` invocation is the
   larger of the command's and the plan's: a plan with `effect: "destructive"`
   needs the `destructive` flagset's `--destructive` and fails with exit 2
   before any request without it. No plan is destructive yet. A command that is

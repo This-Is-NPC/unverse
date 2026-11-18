@@ -30,7 +30,8 @@ No package publication, npm scope ownership, or public download URL is implied.
 
 ## Start here
 
-1. [Connect a development environment](docs/how-to-connect-an-environment.md).
+1. Run `unverse init --confirm` in your project, then
+   [connect a development environment](docs/how-to-connect-an-environment.md).
 2. Run `unverse env whoami --env dev --format json` with the configured credential
    variables already exported by your secret manager or shell.
 3. [Discover a table](docs/how-to-discover-tables.md), then
@@ -85,6 +86,7 @@ can allowlist the `read` commands.
 
 | Command | Purpose |
 | --- | --- |
+| `init` | Create `.unverse/config.json` from a template |
 | `config check` | Validate one local profile |
 | `env list` | List configured profile names and URLs offline |
 | `env whoami` | Identify the actual caller |

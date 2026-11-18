@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   analyzeDependencies,
   artifactCatalog,
@@ -58,6 +59,8 @@ import type { Format } from "./commands.js";
 import { renderCsv } from "./csv.js";
 import { specDocument } from "./help.js";
 import {
+  configFile,
+  configTemplate,
   type ProjectRuntime,
   resolveConfigPath,
   resolveEnvironmentName,
@@ -65,6 +68,7 @@ import {
 
 export interface CliRuntime extends ProjectRuntime {
   readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
   readonly now: () => string;
   readonly writeOut: (line: string) => void;
   readonly writeError: (line: string) => void;
@@ -148,6 +152,7 @@ export async function runCli(
         format,
         runtime,
       );
+    if (command === "init") return await initialize(runtime, format);
     const needsEnvironment = parsed.route.command.flagsets.includes("target");
     const selected = needsEnvironment
       ? resolveEnvironmentName(flags, runtime)
@@ -887,6 +892,41 @@ function render(result: Result<unknown>, format: Format): string {
       return format === "svg" ? dependencySvg(graph) : dependencyMermaid(graph);
     }
   }
+}
+
+async function initialize(
+  runtime: CliRuntime,
+  format: Format,
+): Promise<number> {
+  const path = join(runtime.cwd, configFile);
+  const exists = await runtime.fileExists(path);
+  if (exists && (await runtime.readFile(path)) !== configTemplate)
+    throw new InputError(
+      `${path} already exists and differs from the template; init does not overwrite it.`,
+    );
+  if (!exists) await runtime.writeFile(path, configTemplate);
+  return emitResult(
+    {
+      outputVersion,
+      command: "init",
+      timestamp: runtime.now(),
+      status: "ok",
+      data: { path, created: !exists },
+      evidence: [
+        exists
+          ? `${path} already holds the template.`
+          : `${path} was created from the template.`,
+      ],
+      coverage: {
+        complete: true,
+        limitations: [
+          "The template holds placeholder values; credential values and Dataverse reachability were not checked.",
+        ],
+      },
+    },
+    format,
+    runtime,
+  );
 }
 
 function emitResult(

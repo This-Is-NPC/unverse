@@ -17,12 +17,12 @@ Validate a named local environment without contacting Dataverse.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse config check [--config <path>] --env <name> [--format <human|json|csv>]`
+`unverse config check [--config <path>] [--env <name>] [--format <human|json|csv>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## env list
@@ -36,7 +36,7 @@ List configured environment names and normalized URLs without contacting Dataver
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## env whoami
@@ -46,12 +46,12 @@ Identify the Dataverse organization, caller, and business unit.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse env whoami [--config <path>] --env <name> [--format <human|json|csv>]`
+`unverse env whoami [--config <path>] [--env <name>] [--format <human|json|csv>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## env doctor
@@ -61,12 +61,12 @@ Probe configuration, token acquisition, and Dataverse WhoAmI.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse env doctor [--config <path>] --env <name> [--format <human|json|csv>]`
+`unverse env doctor [--config <path>] [--env <name>] [--format <human|json|csv>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## env compare
@@ -76,12 +76,12 @@ Compare solution versions and masked variable configuration between explicit pro
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse env compare [--config <path>] --env <name> [--format <human|json|csv>] --target-env <name> [--scope <solutions|variables|components|all>] [--component-solution <unique-name>]`
+`unverse env compare [--config <path>] [--env <name>] [--format <human|json|csv>] --target-env <name> [--scope <solutions|variables|components|all>] [--component-solution <unique-name>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--target-env <name>` (required): Select an explicit target environment profile.
 - `--scope <solutions|variables|components|all>`: Choose comparison scope (default all).
@@ -99,12 +99,12 @@ Discover Dataverse table names, entity sets, and primary keys.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse table list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>]`
+`unverse table list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 
@@ -115,7 +115,7 @@ Repeat a read-only OData query with explicit completeness.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse record query <table> [--config <path>] --env <name> [--format <human|json|csv>] --select <columns> [--filter-file <path>] [--order-by <ordering>] [--limit <rows>]`
+`unverse record query <table> [--config <path>] [--env <name>] [--format <human|json|csv>] --select <columns> [--filter-file <path>] [--order-by <ordering>] [--limit <rows>]`
 
 ### Arguments
 
@@ -123,8 +123,8 @@ Repeat a read-only OData query with explicit completeness.
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--select <columns>` (required): Select comma-separated logical column names.
 - `--filter-file <path>`: Read an explicit OData filter expression from a file.
@@ -142,12 +142,12 @@ Inspect normalized metadata within an explicit publisher prefix.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse schema inspect [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path>`
+`unverse schema inspect [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 
@@ -158,12 +158,12 @@ Plan additive metadata changes and report blocked operations.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse schema plan [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
+`unverse schema plan [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--model-file <path>` (required): Read the versioned logical schema model.
@@ -175,12 +175,12 @@ Find solutions by display or unique name.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse solution list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>]`
+`unverse solution list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 
@@ -191,7 +191,7 @@ Inspect component membership for an explicit solution ID.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse solution show <solution-id> [--config <path>] --env <name> [--format <human|json|csv>]`
+`unverse solution show <solution-id> [--config <path>] [--env <name>] [--format <human|json|csv>]`
 
 ### Arguments
 
@@ -199,8 +199,8 @@ Inspect component membership for an explicit solution ID.
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## app list
@@ -210,12 +210,12 @@ Find canvas and model-driven apps without exporting their contents.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse app list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>] [--kind <all|canvas|model-driven>]`
+`unverse app list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>] [--kind <all|canvas|model-driven>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 - `--kind <all|canvas|model-driven>`: Choose app kind (default all).
@@ -227,12 +227,12 @@ Find cloud flows without exporting definitions or connection secrets.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse flow list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>]`
+`unverse flow list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 
@@ -256,7 +256,7 @@ List artifacts of one built-in type as normalized items with only the fields the
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse artifact list <type> [--config <path>] --env <name> [--format <human|json|csv>] [--limit <items>]`
+`unverse artifact list <type> [--config <path>] [--env <name>] [--format <human|json|csv>] [--limit <items>]`
 
 ### Arguments
 
@@ -264,8 +264,8 @@ List artifacts of one built-in type as normalized items with only the fields the
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--limit <items>`: Cap items and report incomplete coverage when more exist.
 
@@ -280,12 +280,12 @@ Find users to disambiguate role investigation selectors.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse user list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>]`
+`unverse user list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 
@@ -296,12 +296,12 @@ Inspect direct and retrieved-team role assignments.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse user show [--config <path>] --env <name> [--format <human|json|csv>] (--user-id <guid> | --email <email> | --domain <name> | --name <full-name> | --caller)`
+`unverse user show [--config <path>] [--env <name>] [--format <human|json|csv>] (--user-id <guid> | --email <email> | --domain <name> | --name <full-name> | --caller)`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--user-id <guid>`: Resolve a user by GUID.
 - `--email <email>`: Resolve a user by exact email.
@@ -320,12 +320,12 @@ Check a role assignment without claiming effective access.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse role check [--config <path>] --env <name> [--format <human|json|csv>] (--user-id <guid> | --email <email> | --domain <name> | --name <full-name> | --caller) (--role-id <guid> | --role <name>)`
+`unverse role check [--config <path>] [--env <name>] [--format <human|json|csv>] (--user-id <guid> | --email <email> | --domain <name> | --name <full-name> | --caller) (--role-id <guid> | --role <name>)`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--user-id <guid>`: Resolve a user by GUID.
 - `--email <email>`: Resolve a user by exact email.
@@ -354,12 +354,12 @@ Inspect environment variable configuration with values always masked.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse variable list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>]`
+`unverse variable list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 
@@ -370,12 +370,12 @@ Find solution-aware connector metadata without retrieving definitions or credent
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse connector list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>] [--solution-id <guid>]`
+`unverse connector list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>] [--solution-id <guid>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 - `--solution-id <guid>`: Select a solution by its environment-specific ID.
@@ -387,12 +387,12 @@ Find visible connection bindings without claiming connection health.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse connref list [--config <path>] --env <name> [--format <human|json|csv>] [--search <text>] [--solution-id <guid>]`
+`unverse connref list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>] [--solution-id <guid>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 - `--solution-id <guid>`: Select a solution by its environment-specific ID.
@@ -404,7 +404,7 @@ Inspect one connection reference by its environment-specific ID.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse connref show <reference-id> [--config <path>] --env <name> [--format <human|json|csv>]`
+`unverse connref show <reference-id> [--config <path>] [--env <name>] [--format <human|json|csv>]`
 
 ### Arguments
 
@@ -412,8 +412,8 @@ Inspect one connection reference by its environment-specific ID.
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## deps list
@@ -423,12 +423,12 @@ Inspect direct required or dependent components using official Dataverse functio
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse deps list [--config <path>] --env <name> [--format <human|json|csv>] [--object-id <guid>] [--component-type <integer>] [--reference-id <guid>] [--max-nodes <count>] [--max-edges <count>] [--max-queries <count>] [--no-bindings] [--direction <required|dependent|both>]`
+`unverse deps list [--config <path>] [--env <name>] [--format <human|json|csv>] [--object-id <guid>] [--component-type <integer>] [--reference-id <guid>] [--max-nodes <count>] [--max-edges <count>] [--max-queries <count>] [--no-bindings] [--direction <required|dependent|both>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--object-id <guid>`: Select the underlying component object ID, not a solution membership ID.
 - `--component-type <integer>`: Pair the object ID with its component type from this environment.
@@ -450,12 +450,12 @@ Build a bounded evidence graph, with HTML, Mermaid, and SVG visual exports.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`, `html`, `mermaid`, `svg`
 
-`unverse deps graph [--config <path>] --env <name> [--format <human|json|csv|html|mermaid|svg>] [--object-id <guid>] [--component-type <integer>] [--reference-id <guid>] [--max-nodes <count>] [--max-edges <count>] [--max-queries <count>] [--no-bindings] [--direction <required|dependent|both>] [--depth <hops>] [--solution-id <guid>]`
+`unverse deps graph [--config <path>] [--env <name>] [--format <human|json|csv|html|mermaid|svg>] [--object-id <guid>] [--component-type <integer>] [--reference-id <guid>] [--max-nodes <count>] [--max-edges <count>] [--max-queries <count>] [--no-bindings] [--direction <required|dependent|both>] [--depth <hops>] [--solution-id <guid>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv|html|mermaid|svg>`: Select the output format (default human); human is indented JSON.
 - `--object-id <guid>`: Select the underlying component object ID, not a solution membership ID.
 - `--component-type <integer>`: Pair the object ID with its component type from this environment.
@@ -479,12 +479,12 @@ Trace observed downstream consumers and explain potential impact paths.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`, `html`, `mermaid`, `svg`
 
-`unverse deps impact [--config <path>] --env <name> [--format <human|json|csv|html|mermaid|svg>] [--object-id <guid>] [--component-type <integer>] [--reference-id <guid>] [--max-nodes <count>] [--max-edges <count>] [--max-queries <count>] [--no-bindings] [--depth <hops>]`
+`unverse deps impact [--config <path>] [--env <name>] [--format <human|json|csv|html|mermaid|svg>] [--object-id <guid>] [--component-type <integer>] [--reference-id <guid>] [--max-nodes <count>] [--max-edges <count>] [--max-queries <count>] [--no-bindings] [--depth <hops>]`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv|html|mermaid|svg>`: Select the output format (default human); human is indented JSON.
 - `--object-id <guid>`: Select the underlying component object ID, not a solution membership ID.
 - `--component-type <integer>`: Pair the object ID with its component type from this environment.
@@ -506,12 +506,12 @@ Generate deterministic fixture IDs and review create-only data operations.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse seed plan [--config <path>] --env <name> [--format <human|json|csv>] --seed-file <path>`
+`unverse seed plan [--config <path>] [--env <name>] [--format <human|json|csv>] --seed-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--seed-file <path>` (required): Read a versioned declarative seed with keyed rows.
 
@@ -522,12 +522,12 @@ Review a policy-filtered Dataverse-to-Dataverse create-only transfer.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse transfer plan [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path> --manifest-file <path> --policy-file <path>`
+`unverse transfer plan [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path> --manifest-file <path> --policy-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--manifest-file <path>` (required): Read a canonical transfer manifest or its result envelope.
@@ -540,12 +540,12 @@ Export the modeled Dataverse subset into a verified transfer manifest.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse pg export [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
+`unverse pg export [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--model-file <path>` (required): Read the versioned logical schema model.
@@ -557,12 +557,12 @@ Import into a new owned PostgreSQL schema, or verify a committed transfer on res
 - Effect: `write`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse pg import [--config <path>] --env <name> [--format <human|json|csv>] --confirm --manifest-file <path>`
+`unverse pg import [--config <path>] [--env <name>] [--format <human|json|csv>] --confirm --manifest-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--confirm` (required): Explicitly authorize the reviewed writes.
 - `--manifest-file <path>` (required): Read a canonical transfer manifest or its result envelope.
@@ -578,12 +578,12 @@ Verify identities, relationships, decimals, and temporal values in PostgreSQL.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse pg verify [--config <path>] --env <name> [--format <human|json|csv>] --manifest-file <path>`
+`unverse pg verify [--config <path>] [--env <name>] [--format <human|json|csv>] --manifest-file <path>`
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--manifest-file <path>` (required): Read a canonical transfer manifest or its result envelope.
 
@@ -598,7 +598,7 @@ Apply a reviewed, fresh, environment-bound plan of any kind after explicit confi
 - Effect: `write`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse apply <plan-file> [--config <path>] --env <name> [--format <human|json|csv>] --confirm [--destructive]`
+`unverse apply <plan-file> [--config <path>] [--env <name>] [--format <human|json|csv>] --confirm [--destructive]`
 
 ### Arguments
 
@@ -606,8 +606,8 @@ Apply a reviewed, fresh, environment-bound plan of any kind after explicit confi
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--confirm` (required): Explicitly authorize the reviewed writes.
 - `--destructive`: Authorize a plan whose effect is destructive; the invocation is then destructive.
@@ -624,7 +624,7 @@ Re-inspect the target and report whether a plan is satisfied, without writing.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse verify <plan-file> [--config <path>] --env <name> [--format <human|json|csv>]`
+`unverse verify <plan-file> [--config <path>] [--env <name>] [--format <human|json|csv>]`
 
 ### Arguments
 
@@ -632,8 +632,8 @@ Re-inspect the target and report whether a plan is satisfied, without writing.
 
 ### Flags
 
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ### Exit codes
@@ -652,3 +652,17 @@ Print the whole command spec as one JSON document.
 ### Flags
 
 - `--format <human|json>`: Select the output format (default human); human is indented JSON.
+
+## init
+
+Create .unverse/config.json from a template in the current directory.
+
+- Effect: `write`
+- Output formats: `human` (default), `json`
+
+`unverse init [--format <human|json>] --confirm`
+
+### Flags
+
+- `--format <human|json>`: Select the output format (default human); human is indented JSON.
+- `--confirm` (required): Explicitly authorize the reviewed writes.
