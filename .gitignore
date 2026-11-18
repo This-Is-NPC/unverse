@@ -9,7 +9,7 @@ exports/
 .env
 .env.*
 !.env.example
-unverse.config.json
+.unverse/
 *.log
 *.tmp
 .DS_Store

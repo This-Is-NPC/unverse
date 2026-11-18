@@ -169,6 +169,11 @@ mutations.push(
   ["role-root-unit", "dataverse/security-roles.js", " and _businessunitid_value eq ${root}", "", "dataverse", "roles are matched by name in the root business unit only", "security-roles"],
 );
 
+mutations.push(
+  ["discovery-walk", "cli/project.js", "if (parent === directory)", "if (true)", "cli", "discovers .unverse/config.json from a nested directory", "project"],
+  ["environment-precedence", "cli/project.js", 'const flag = flags.get("--env");', 'const flag = variable(runtime, "UNVERSE_ENV") ?? flags.get("--env");', "cli", "--env beats UNVERSE_ENV and records its origin", "project"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

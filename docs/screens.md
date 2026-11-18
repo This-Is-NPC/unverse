@@ -39,7 +39,9 @@ separate screen. Live checks, packaging, and CI have no persistent UI.
 
 ## 2. Configuration
 
-`unverse config check --env dev` validates only the local profile.
+`unverse config check --env dev` validates only the local profile. The
+screens run in a temporary directory whose `.unverse/config.json` is the
+fixture configuration; the pictures show that directory as `/work/project`.
 
 ![Configuration](img/02-config.png)
 

@@ -291,7 +291,7 @@ Good: `feat(filter): add priority option` then
 - Diagnostics are read-only. Schema and transfer writes require explicit
   confirmation and the guarded contracts in `docs/design.md` §§14–16. Every
   result records the selected environment and identity evidence when known.
-- Real Dataverse credentials and local `unverse.config.json` files are
+- Real Dataverse credentials and local `.unverse/config.json` files are
   never committed. Offline verification uses synthetic fixtures only.
 - SQL, provisioning, PostgreSQL, a TUI, Code Apps adapters, and effective
   access checks are separate milestones; scope and release boundaries are

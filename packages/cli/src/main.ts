@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { PostgresStore } from "@unverse/postgres";
 import {
   createDataverseClient,
@@ -13,6 +13,13 @@ const secretValues = Object.entries(process.env).flatMap(([name, value]) =>
 
 const exitCode = await runCli(process.argv.slice(2), {
   readFile: (path) => readFile(path, "utf8"),
+  fileExists: (path) =>
+    access(path).then(
+      () => true,
+      () => false,
+    ),
+  cwd: process.cwd(),
+  env: process.env,
   now: () => new Date().toISOString(),
   writeOut: (line) => process.stdout.write(line),
   writeError: (line) => process.stderr.write(line),

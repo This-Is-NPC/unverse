@@ -47,6 +47,8 @@ const validConfig = JSON.stringify({
   },
 });
 
+const discoveredConfig = "/work/project/.unverse/config.json";
+
 test("requires an environment before reading configuration", async () => {
   let reads = 0;
   const result = await runCli(
@@ -209,6 +211,9 @@ test("JSON parse errors remain JSON even when --format json follows the bad flag
 function runtime(readConfig, output = [], errors = [], secrets = [], whoAmI) {
   return {
     readFile: async () => readConfig(),
+    fileExists: async () => true,
+    cwd: "/work/project",
+    env: {},
     now: () => "2026-10-16T00:00:00.000Z",
     writeOut: (line) => output.push(line),
     writeError: (line) => errors.push(line),
@@ -296,7 +301,7 @@ const mappingDocument = { prefix: "uv", solution: "UnverseFixture" };
 
 test("CLI schema planning reads solution components from the mapping file", async () => {
   const documents = {
-    "unverse.config.json": validConfig,
+    [discoveredConfig]: validConfig,
     "model.json": JSON.stringify(schemaModel),
     "mapping.json": JSON.stringify({
       ...mappingDocument,
@@ -322,7 +327,8 @@ test("CLI schema planning reads solution components from the mapping file", asyn
       ["schema", "plan", "--env", "dev", ...flags, "--format", "json"],
       {
         ...runtime(() => validConfig, output),
-        readFile: async (path) => documents[path],
+        readFile: async (path) =>
+          path === discoveredConfig ? validConfig : documents[path],
         connect: () => solutionComponentFixture().client,
       },
     );
@@ -359,7 +365,7 @@ test("CLI schema planning and confirmed apply share the result contract", async 
   const base = {
     ...runtime(() => validConfig, output),
     readFile: async (path) =>
-      path === "unverse.config.json"
+      path === discoveredConfig
         ? validConfig
         : path === "model.json"
           ? JSON.stringify(schemaModel)
@@ -405,7 +411,7 @@ test("CLI apply without confirmation does not request a token", async () => {
     {
       ...runtime(() => validConfig),
       readFile: async (path) =>
-        path === "unverse.config.json" ? validConfig : "{}",
+        path === discoveredConfig ? validConfig : "{}",
       connect: () => ({
         whoAmI: async () => {
           calls += 1;
@@ -421,7 +427,7 @@ async function planAndApplyData() {
   const fixture = await dataFixture();
   const output = [];
   const documents = {
-    "unverse.config.json": validConfig,
+    [discoveredConfig]: validConfig,
     "seed.json": JSON.stringify(
       seedSpec(fixture.model, fixture.mapping, transferData),
     ),
@@ -459,7 +465,7 @@ test("apply dispatches schema and data plans by kind", async () => {
   const schema = schemaFixture();
   const output = [];
   const documents = {
-    "unverse.config.json": validConfig,
+    [discoveredConfig]: validConfig,
     "model.json": JSON.stringify(schemaModel),
     "mapping.json": JSON.stringify(mappingDocument),
   };
@@ -511,8 +517,7 @@ test("apply refuses a destructive plan without --destructive before any request"
   const plan = JSON.stringify({ kind: "schema", effect: "destructive" });
   const base = {
     ...runtime(() => validConfig),
-    readFile: async (path) =>
-      path === "unverse.config.json" ? validConfig : plan,
+    readFile: async (path) => (path === discoveredConfig ? validConfig : plan),
     connect: () => {
       connections += 1;
       return {
@@ -535,7 +540,7 @@ test("verify reports an unsatisfied plan with exit 1 and a satisfied one with ex
   const schema = schemaFixture();
   const output = [];
   const documents = {
-    "unverse.config.json": validConfig,
+    [discoveredConfig]: validConfig,
     "model.json": JSON.stringify(schemaModel),
     "mapping.json": JSON.stringify(mappingDocument),
   };
@@ -877,7 +882,7 @@ test("a profile without an expected organization adds no match evidence", async 
     ["env", "whoami", "--env", "dev", "--format", "json"],
     pinnedRuntime(pinnedConfig(), { dev: otherOrganization }, [], output),
   );
-  assert.deepEqual(JSON.parse(output[0]).evidence, [
+  assert.deepEqual(JSON.parse(output[0]).evidence.slice(2), [
     "Dataverse WhoAmI completed.",
   ]);
 });
@@ -1186,7 +1191,7 @@ test("flags are exact, known, valid for the command, and given once", async () =
     ["apply", "p.json", "--env", "dev", "--confirm=yes"],
     /--confirm does not take a value\./,
   );
-  await rejected(["env", "whoami"], /--env is required\./);
+  await rejected(["env", "whoami"], /An environment is required/);
   await rejected(
     ["apply", "p.json", "--env", "dev"],
     /--confirm is required\./,

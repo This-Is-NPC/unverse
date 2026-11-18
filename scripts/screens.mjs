@@ -67,7 +67,7 @@ try {
       (element, text) => {
         element.textContent = text;
       },
-      `$ unverse ${scene.args.join(" ")}\n\n${output}`,
+      `$ unverse ${scene.args.join(" ")}\n\n${output.replaceAll(consumer.directory, "/work/project")}`,
     );
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({

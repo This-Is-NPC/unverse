@@ -22,14 +22,16 @@ probe, not for validating table or record permissions.
 
 ## Steps
 
-1. Create a local, ignored `unverse.config.json`:
+1. In the root of your project, create `.unverse/config.json`. `your-org`
+   in `url` is a placeholder for your Dataverse HTTPS origin, and the three
+   `...Env` fields name the variables of step 2:
 
    ```json
    {
      "configVersion": 1,
      "environments": {
        "dev": {
-         "url": "https://example-dev.crm.dynamics.com",
+         "url": "https://your-org.crm.dynamics.com",
          "tenantIdEnv": "UNVERSE_TENANT_ID",
          "clientIdEnv": "UNVERSE_CLIENT_ID",
          "clientSecretEnv": "UNVERSE_CLIENT_SECRET"
@@ -37,6 +39,11 @@ probe, not for validating table or record permissions.
      }
    }
    ```
+
+   The file holds names of variables, never secret values, so it can be
+   committed. Every command finds it from the directory you run it in, then
+   its parents, up to the filesystem root. `--config <path>` or
+   `UNVERSE_CONFIG` names another file instead.
 
 2. Set the three referenced variables through your secret manager or CI
    secret configuration. Their names may differ, but the profile must use the
@@ -47,6 +54,21 @@ probe, not for validating table or record permissions.
    ```sh
    unverse config check --env dev --format json
    ```
+
+   `--env` names the environment. `UNVERSE_ENV=dev` does the same and `--env`
+   wins when both are set. The name is never read from a file: without
+   `--env` or `UNVERSE_ENV` the command exits 2. Every result records where
+   the configuration and the environment name came from in `evidence`, run
+   from a subdirectory of the project (the paths are from a temporary
+   directory):
+
+   ```text
+   Configuration /tmp/app/.unverse/config.json found by searching up from /tmp/app/src.
+   Environment dev from --env.
+   ```
+
+   `data.configuration` carries the same path and origin for `config check`
+   and `env list`.
 
    Offline tests observed a single JSON document with `status: "ok"`,
    `data.configVersion: 1`, and the normalized selected environment. This
@@ -110,7 +132,8 @@ probe, not for validating table or record permissions.
 
 ## What can go wrong
 
-Invalid profiles and an organization that differs from
+No `.unverse/config.json` from the current directory up to the root, no
+environment name, invalid profiles, and an organization that differs from
 `expectedOrganizationId` exit 2, authentication failures exit 3, denied requests exit
 4, and service or exhausted transport failures exit 5. Inspect `error.code`
 and `coverage` in JSON. A failed `env doctor` probe marks later checks as not run

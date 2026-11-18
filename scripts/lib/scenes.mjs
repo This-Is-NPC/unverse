@@ -1,4 +1,4 @@
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -244,9 +244,10 @@ export const scenes = [
 ];
 
 export async function stageScenes(root, consumer) {
+  mkdirSync(resolve(consumer.directory, ".unverse"));
   cpSync(
     resolve(root, "packages/cli/test/fixtures/config.json"),
-    resolve(consumer.directory, "unverse.config.json"),
+    resolve(consumer.directory, ".unverse/config.json"),
   );
   cpSync(
     resolve(root, "packages/core/test/fixtures/schema.json"),

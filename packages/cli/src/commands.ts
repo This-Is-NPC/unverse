@@ -98,7 +98,8 @@ const flagsets = {
       {
         name: "--config",
         value: "path",
-        summary: "Read configuration instead of unverse.config.json.",
+        summary:
+          "Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.",
       },
     ],
   },
@@ -108,8 +109,8 @@ const flagsets = {
       {
         name: "--env",
         value: "name",
-        summary: "Select a named environment profile.",
-        required: true,
+        summary:
+          "Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.",
       },
     ],
   },

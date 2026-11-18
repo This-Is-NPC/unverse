@@ -103,9 +103,27 @@ rest of the run, and fails with exit 2 naming the profile and both IDs when
 they differ. This stops a swapped or edited profile from reading or writing
 the wrong organization. Profiles without the field are not checked.
 
-Environment operations require an explicit environment name. Invalid or
-incomplete profiles fail before token acquisition or a network request.
-`config check` implements this preflight without acquiring a token.
+A project keeps its Unverse files in a versioned `.unverse/` directory.
+Configuration is `.unverse/config.json`, found by walking up from the current
+directory to the filesystem root; the first hit wins, so the nearest project
+decides. There is no other default file name. The path is chosen by, in order,
+`--config <path>`, the `UNVERSE_CONFIG` variable, and that discovery. When none
+yields a file the command exits 2 and names where it searched.
+
+Environment operations require an explicit environment name: `--env`, or the
+`UNVERSE_ENV` variable, with the flag winning. The variable is an explicit
+choice by the caller, so it counts; a file never selects an environment, so a
+checked-in default cannot aim a write at the wrong target. Without either the
+command exits 2.
+
+Every result that carries evidence records the origin of the configuration
+path and of the environment name (`from --config`, `from UNVERSE_CONFIG`,
+`found by searching up from <cwd>`, `from --env`, `from UNVERSE_ENV`), and
+`config check` and `env list` return the resolved path and origin in
+`data.configuration`. Only names and paths appear, never variable values.
+
+Invalid or incomplete profiles fail before token acquisition or a network
+request. `config check` implements this preflight without acquiring a token.
 
 ## 7. Command surface
 
@@ -736,8 +754,9 @@ choices for values, and one document tools can read. Each command declares:
   needs the `destructive` flagset's `--destructive` and fails with exit 2
   before any request without it. No plan is destructive yet. A command that is
   not `read` carries the `write` flagset, whose `--confirm` is required.
-- flagsets: `target` (`--env`, `--config`), `output` (`--format`), `write`
-  (`--confirm`), `destructive` (`--destructive`), and shared sets for search, publisher mapping, user selection,
+- flagsets: `config` (`--config`), `target` (`--env`, plus `--config`; `--env`
+  may come from `UNVERSE_ENV`), `output` (`--format`), `write` (`--confirm`),
+  `destructive` (`--destructive`), and shared sets for search, publisher mapping, user selection,
   and dependency scope. Flags specific to one command sit on the command.
 - positionals: one required resource identity, such as the table of
   `record query <table>` or the plan file of `apply <plan-file>`.

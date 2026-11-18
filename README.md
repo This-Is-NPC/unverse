@@ -44,8 +44,10 @@ No package publication, npm scope ownership, or public download URL is implied.
    [trace potential impact](docs/how-to-assess-dependency-impact.md) before
    changing a shared artifact.
 
-**Explicit environments.** Every environment operation requires `--env`.
-Profiles contain variable references, not secret values. See
+**Explicit environments.** Every environment operation requires `--env` or
+`UNVERSE_ENV`; a file never picks one. The configuration is
+`.unverse/config.json`, found from the current directory upward. Profiles
+contain variable references, not secret values. See
 [configuration](docs/design.md#6-environments-and-authentication).
 
 **Evidence, not access claims.** Direct and team assignment sources survive

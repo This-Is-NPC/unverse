@@ -57,8 +57,13 @@ import { InputError, parseInvocation, requestsJson } from "./arguments.js";
 import type { Format } from "./commands.js";
 import { renderCsv } from "./csv.js";
 import { specDocument } from "./help.js";
+import {
+  type ProjectRuntime,
+  resolveConfigPath,
+  resolveEnvironmentName,
+} from "./project.js";
 
-export interface CliRuntime {
+export interface CliRuntime extends ProjectRuntime {
   readonly readFile: (path: string) => Promise<string>;
   readonly now: () => string;
   readonly writeOut: (line: string) => void;
@@ -97,6 +102,17 @@ export async function runCli(
   let environment: EnvironmentEvidence | undefined;
   let stage: "configuration" | "token and WhoAmI" = "configuration";
   let format: Format = requestsJson(argv) ? "json" : "human";
+  const origins: string[] = [];
+  const emit = (
+    result: Result<unknown>,
+    resultFormat: Format,
+    output: CliRuntime,
+  ) =>
+    emitResult(
+      { ...result, evidence: [...origins, ...result.evidence] },
+      resultFormat,
+      output,
+    );
   try {
     const parsed = parseInvocation(argv);
     if (parsed.kind === "help") {
@@ -132,10 +148,20 @@ export async function runCli(
         format,
         runtime,
       );
+    const needsEnvironment = parsed.route.command.flagsets.includes("target");
+    const selected = needsEnvironment
+      ? resolveEnvironmentName(flags, runtime)
+      : undefined;
+    const configPath = await resolveConfigPath(flags, runtime);
+    origins.push(`Configuration ${configPath.value} ${configPath.origin}.`);
+    if (selected !== undefined)
+      origins.push(`Environment ${selected.value} from ${selected.origin}.`);
+    const configuration = {
+      path: configPath.value,
+      origin: configPath.origin,
+    };
     const config = parseConfig(
-      JSON.parse(
-        await runtime.readFile(flags.get("--config") ?? "unverse.config.json"),
-      ),
+      JSON.parse(await runtime.readFile(configPath.value)),
     );
     if (command === "env list")
       return emit(
@@ -145,6 +171,7 @@ export async function runCli(
           timestamp: runtime.now(),
           status: "ok",
           data: {
+            configuration,
             environments: Object.entries(config.environments).map(
               ([name, { url }]) => ({ name, url }),
             ),
@@ -162,7 +189,7 @@ export async function runCli(
         format,
         runtime,
       );
-    const environmentName = flags.get("--env") ?? "";
+    const environmentName = selected?.value ?? "";
     const profile = selectEnvironment(config, environmentName);
     environment = { name: environmentName, url: profile.url };
     const base = {
@@ -176,7 +203,7 @@ export async function runCli(
         {
           ...base,
           status: "ok",
-          data: { configVersion: config.configVersion },
+          data: { configVersion: config.configVersion, configuration },
           evidence: [
             "Configuration schema and selected environment profile are valid.",
           ],
@@ -862,7 +889,7 @@ function render(result: Result<unknown>, format: Format): string {
   }
 }
 
-function emit(
+function emitResult(
   result: Result<unknown>,
   format: Format,
   runtime: CliRuntime,
