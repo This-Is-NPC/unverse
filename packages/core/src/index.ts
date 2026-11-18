@@ -42,6 +42,12 @@ export {
   type SchemaSnapshot,
 } from "./plan.js";
 export {
+  type PlanEffect,
+  type PlanHeader,
+  type PlanKind,
+  readPlanHeader,
+} from "./plan-header.js";
+export {
   type Coverage,
   type EnvironmentEvidence,
   type ErrorCode,

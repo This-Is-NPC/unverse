@@ -13,7 +13,9 @@ import transferData from "../../core/test/fixtures/data.json" with {
 import transferModel from "../../core/test/fixtures/schema.json" with {
   type: "json",
 };
+import { seedSpec } from "../../core/test/fixtures/seed.mjs";
 import { artifactFixture } from "../../dataverse/test/fixtures/artifacts.mjs";
+import { dataFixture } from "../../dataverse/test/fixtures/data.mjs";
 import {
   dependencyEnvironment,
   dependencyFixture,
@@ -388,17 +390,7 @@ test("CLI schema planning and confirmed apply share the result contract", async 
   assert.equal(plan.data.provider, "dataverse");
   assert.equal(
     await runCli(
-      [
-        "schema",
-        "apply",
-        "--env",
-        "dev",
-        "--plan-file",
-        "plan.json",
-        "--confirm",
-        "--format",
-        "json",
-      ],
+      ["apply", "plan.json", "--env", "dev", "--confirm", "--format", "json"],
       base,
     ),
     0,
@@ -406,19 +398,10 @@ test("CLI schema planning and confirmed apply share the result contract", async 
   assert.deepEqual(JSON.parse(output[1]).data.operations, []);
 });
 
-test("CLI schema apply without confirmation does not request a token", async () => {
+test("CLI apply without confirmation does not request a token", async () => {
   let calls = 0;
   const result = await runCli(
-    [
-      "schema",
-      "apply",
-      "--env",
-      "dev",
-      "--plan-file",
-      "plan.json",
-      "--format",
-      "json",
-    ],
+    ["apply", "plan.json", "--env", "dev", "--format", "json"],
     {
       ...runtime(() => validConfig),
       readFile: async (path) =>
@@ -432,6 +415,182 @@ test("CLI schema apply without confirmation does not request a token", async () 
   );
   assert.equal(result, 2);
   assert.equal(calls, 0);
+});
+
+async function planAndApplyData() {
+  const fixture = await dataFixture();
+  const output = [];
+  const documents = {
+    "unverse.config.json": validConfig,
+    "seed.json": JSON.stringify(
+      seedSpec(fixture.model, fixture.mapping, transferData),
+    ),
+  };
+  const base = {
+    ...runtime(() => validConfig, output),
+    readFile: async (path) => documents[path],
+    connect: () => fixture.client,
+  };
+  assert.equal(
+    await runCli(
+      [
+        "seed",
+        "plan",
+        "--env",
+        "dev",
+        "--seed-file",
+        "seed.json",
+        "--format",
+        "json",
+      ],
+      base,
+    ),
+    0,
+  );
+  documents["plan.json"] = output[0];
+  const code = await runCli(
+    ["apply", "plan.json", "--env", "dev", "--confirm", "--format", "json"],
+    base,
+  );
+  return { code, fixture, output, base };
+}
+
+test("apply dispatches schema and data plans by kind", async () => {
+  const schema = schemaFixture();
+  const output = [];
+  const documents = {
+    "unverse.config.json": validConfig,
+    "model.json": JSON.stringify(schemaModel),
+    "mapping.json": JSON.stringify(mappingDocument),
+  };
+  const base = {
+    ...runtime(() => validConfig, output),
+    readFile: async (path) => documents[path],
+    connect: () => schema.client,
+  };
+  await runCli(
+    [
+      "schema",
+      "plan",
+      "--env",
+      "dev",
+      "--mapping-file",
+      "mapping.json",
+      "--model-file",
+      "model.json",
+      "--format",
+      "json",
+    ],
+    base,
+  );
+  const planned = JSON.parse(output[0]).data;
+  assert.equal(planned.kind, "schema");
+  assert.equal(planned.effect, "write");
+  documents["plan.json"] = JSON.stringify(planned);
+  const writesBefore = schema.writes.length;
+  assert.equal(
+    await runCli(
+      ["apply", "plan.json", "--env", "dev", "--confirm", "--format", "json"],
+      base,
+    ),
+    0,
+  );
+  assert.ok(schema.writes.length > writesBefore);
+
+  const data = await planAndApplyData();
+  assert.equal(data.code, 0);
+  assert.equal(JSON.parse(data.output[0]).data.kind, "data");
+  assert.equal(JSON.parse(data.output[0]).data.effect, "write");
+  assert.equal(JSON.parse(data.output[1]).data.verified, true);
+  assert.equal(data.fixture.batches.length, 1);
+});
+
+test("apply refuses a destructive plan without --destructive before any request", async () => {
+  let connections = 0;
+  let requests = 0;
+  const plan = JSON.stringify({ kind: "schema", effect: "destructive" });
+  const base = {
+    ...runtime(() => validConfig),
+    readFile: async (path) =>
+      path === "unverse.config.json" ? validConfig : plan,
+    connect: () => {
+      connections += 1;
+      return {
+        whoAmI: async () => {
+          requests += 1;
+          throw new DataverseError("service", "stop");
+        },
+      };
+    },
+  };
+  const arguments_ = ["apply", "plan.json", "--env", "dev", "--confirm"];
+  assert.equal(await runCli(arguments_, base), 2);
+  assert.equal(connections, 0);
+  assert.equal(requests, 0);
+  await runCli([...arguments_, "--destructive"], base);
+  assert.equal(requests, 1);
+});
+
+test("verify reports an unsatisfied plan with exit 1 and a satisfied one with exit 0 without writing", async () => {
+  const schema = schemaFixture();
+  const output = [];
+  const documents = {
+    "unverse.config.json": validConfig,
+    "model.json": JSON.stringify(schemaModel),
+    "mapping.json": JSON.stringify(mappingDocument),
+  };
+  const base = {
+    ...runtime(() => validConfig, output),
+    readFile: async (path) => documents[path],
+    connect: () => schema.client,
+  };
+  await runCli(
+    [
+      "schema",
+      "plan",
+      "--env",
+      "dev",
+      "--mapping-file",
+      "mapping.json",
+      "--model-file",
+      "model.json",
+      "--format",
+      "json",
+    ],
+    base,
+  );
+  documents["plan.json"] = output[0];
+  const verify = ["verify", "plan.json", "--env", "dev", "--format", "json"];
+  assert.equal(await runCli(verify, base), 1);
+  assert.equal(JSON.parse(output[1]).data.satisfied, false);
+  assert.ok(JSON.parse(output[1]).data.operations.length > 0);
+  assert.equal(schema.writes.length, 0);
+  assert.equal(
+    await runCli(
+      ["apply", "plan.json", "--env", "dev", "--confirm", "--format", "json"],
+      base,
+    ),
+    0,
+  );
+  const writes = schema.writes.length;
+  assert.equal(await runCli(verify, base), 0);
+  assert.equal(JSON.parse(output[3]).data.satisfied, true);
+  assert.equal(schema.writes.length, writes);
+
+  const data = await planAndApplyData();
+  const batches = data.fixture.batches.length;
+  assert.equal(await runCli(verify, data.base), 0);
+  assert.equal(JSON.parse(data.output[2]).data.kind, "data");
+  assert.equal(JSON.parse(data.output[2]).data.satisfied, true);
+  assert.equal(data.fixture.batches.length, batches);
+});
+
+test("the per-kind apply commands are unknown", async () => {
+  for (const group of ["schema", "seed", "transfer"])
+    await rejected(
+      [group, "apply", "--env", "dev", "--plan-file", "p.json", "--confirm"],
+      new RegExp(`Unknown command ${group} apply\\.`),
+    );
 });
 
 test("CLI transfer import requires confirmation before connecting", async () => {
@@ -1024,21 +1183,17 @@ test("flags are exact, known, valid for the command, and given once", async () =
     /--env requires a value\./,
   );
   await rejected(
-    [
-      "schema",
-      "apply",
-      "--env",
-      "dev",
-      "--plan-file",
-      "p.json",
-      "--confirm=yes",
-    ],
+    ["apply", "p.json", "--env", "dev", "--confirm=yes"],
     /--confirm does not take a value\./,
   );
   await rejected(["env", "whoami"], /--env is required\./);
   await rejected(
-    ["schema", "apply", "--env", "dev", "--plan-file", "p.json"],
+    ["apply", "p.json", "--env", "dev"],
     /--confirm is required\./,
+  );
+  await rejected(
+    ["verify", "p.json", "--env", "dev", "--confirm"],
+    /Flag --confirm is not valid for verify\./,
   );
 });
 
@@ -1111,7 +1266,8 @@ test("every command declares its effect in help, the reference, and the spec", a
   const effects = Object.fromEntries(
     document.commands.map((command) => [command.path, command.effect]),
   );
-  assert.equal(effects["schema apply"], "write");
+  assert.equal(effects.apply, "write");
+  assert.equal(effects.verify, "read");
   assert.equal(effects["pg import"], "write");
   assert.equal(effects["table list"], "read");
   assert.equal(effects.spec, "read");

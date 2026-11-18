@@ -31,6 +31,7 @@ export {
   users,
   variables,
 } from "./discovery.js";
+export { applyPlan, type PlanOutcome, verifyPlan } from "./plan.js";
 export { type QueryOptions, query, type Table, tables } from "./query.js";
 export {
   resolveRole,

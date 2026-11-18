@@ -53,7 +53,7 @@ mutations.push(
   ["decimal-loss", "core/values.js", 'fraction.slice(scale).replaceAll("0", "") !== ""', "false", "core", "rejects missing columns, broken references, and lossy decimals", "transfer"],
   ["identity-ledger-count", "core/transfer.js", "Object.keys(identities[entity.name] ?? {}).length !== expected.length", "false", "core", "detects extra identity ledger entries and extra rows", "transfer"],
   ["postgres-primary-key", "postgres/index.js", "keys.rows.length !== 1 ||\n                keys.rows[0]?.column_name !== entity.primaryKey", "false", "postgres", "PostgreSQL detects a removed primary key", "postgres"],
-  ["raw-manifest", "cli/run.js", "input.outputVersion === outputVersion ? input.data : input", "input.data ?? input", "cli", "CLI transfer verification uses PostgreSQL without requesting a Dataverse token"],
+  ["raw-manifest", "cli/run.js", "return input.outputVersion === outputVersion ? input.data : input;", "return input.data ?? input;", "cli", "CLI transfer verification uses PostgreSQL without requesting a Dataverse token"],
   ["table-label", "dataverse/query.js", "table.displayName, table.entitySet", "null, table.entitySet", "dataverse", "table search resolves display labels and entity sets", "query"],
   ["flow-category", "dataverse/discovery.js", "category eq 5", "category eq 0", "dataverse", "flow discovery restricts reads to cloud flows", "discovery"],
   ["variable-mask", "dataverse/discovery.js", 'value: "[MASKED]"', "value: _value", "dataverse", "variable inventory masks values and never reads secret overrides", "discovery"],
@@ -153,6 +153,12 @@ mutations.push(
   ["artifact-invent-field", "dataverse/artifacts.js", "managed: row.managed,", "managed: row.managed ?? false,", "dataverse", "a field the source does not provide stays absent", "artifacts"],
   ["artifact-type-validation", "cli/arguments.js", "positional.choices !== undefined && !positional.choices.includes(word)", "false", "cli", "an artifact type outside the catalog exits two before connecting"],
   ["artifact-incomplete", "dataverse/artifacts.js", ": { items: items.slice(0, limit), complete: false }", ": { items: items.slice(0, limit), complete: true }", "cli", "a capped artifact list is inconclusive and exits seven"],
+);
+
+mutations.push(
+  ["apply-destructive", "cli/run.js", 'plan?.effect === "destructive" &&', "false &&", "cli", "apply refuses a destructive plan without --destructive before any request"],
+  ["apply-kind", "dataverse/plan.js", 'if (kind === "schema") {', 'if (kind !== "schema") {', "cli", "apply dispatches schema and data plans by kind"],
+  ["verify-write", "dataverse/plan.js", "? await verifySchemaPlan(client, input, environment)", "? (await applySchema(client, input, environment, true), await verifySchemaPlan(client, input, environment))", "cli", "verify reports an unsatisfied plan with exit 1 and a satisfied one with exit 0 without writing"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

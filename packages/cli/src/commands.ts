@@ -134,6 +134,16 @@ const flagsets = {
       },
     ],
   },
+  destructive: {
+    flags: [
+      {
+        name: "--destructive",
+        value: null,
+        summary:
+          "Authorize a plan whose effect is destructive; the invocation is then destructive.",
+      },
+    ],
+  },
   search: {
     flags: [
       {
@@ -254,11 +264,9 @@ const depth: FlagSpec = {
   summary:
     "Bound traversal to 0–10 hops from each root (default 3). A frontier remains explicitly unexplored.",
 };
-const planFile: FlagSpec = {
-  name: "--plan-file",
-  value: "path",
+const planFile: PositionalSpec = {
+  name: "plan-file",
   summary: "Read a reviewed plan or its JSON result envelope.",
-  required: true,
 };
 const modelFile: FlagSpec = {
   name: "--model-file",
@@ -422,7 +430,7 @@ export const resources: readonly ResourceSpec[] = [
   },
   {
     name: "schema",
-    summary: "Inspect, plan, and apply additive metadata changes.",
+    summary: "Inspect metadata and plan additive changes.",
     commands: [
       {
         name: "inspect",
@@ -442,19 +450,6 @@ export const resources: readonly ResourceSpec[] = [
         flagsets: ["target", "output", "mapping"],
         flags: [modelFile],
         outputs: tabular,
-      },
-      {
-        name: "apply",
-        stage: "apply",
-        effect: "write",
-        summary:
-          "Apply an explicitly confirmed, fresh, environment-bound schema plan.",
-        flagsets: ["target", "output", "write"],
-        flags: [planFile],
-        outputs: tabular,
-        exits: {
-          7: "Operations remain or are blocked after the reviewed plan was applied.",
-        },
       },
     ],
   },
@@ -721,7 +716,7 @@ export const resources: readonly ResourceSpec[] = [
   },
   {
     name: "seed",
-    summary: "Plan and apply deterministic fixture data.",
+    summary: "Plan deterministic fixture data.",
     commands: [
       {
         name: "plan",
@@ -740,21 +735,11 @@ export const resources: readonly ResourceSpec[] = [
         ],
         outputs: tabular,
       },
-      {
-        name: "apply",
-        stage: "apply",
-        effect: "write",
-        summary: "Apply a reviewed seed plan as one bounded atomic changeset.",
-        flagsets: ["target", "output", "write"],
-        flags: [planFile],
-        outputs: tabular,
-        exits: { 1: "Post-apply verification failed." },
-      },
     ],
   },
   {
     name: "transfer",
-    summary: "Plan and apply a Dataverse-to-Dataverse transfer.",
+    summary: "Plan a Dataverse-to-Dataverse transfer.",
     commands: [
       {
         name: "plan",
@@ -774,17 +759,6 @@ export const resources: readonly ResourceSpec[] = [
           },
         ],
         outputs: tabular,
-      },
-      {
-        name: "apply",
-        stage: "apply",
-        effect: "write",
-        summary:
-          "Apply a reviewed transfer without deleting or overwriting existing rows.",
-        flagsets: ["target", "output", "write"],
-        flags: [planFile],
-        outputs: tabular,
-        exits: { 1: "Post-apply verification failed." },
       },
     ],
   },
@@ -829,6 +803,31 @@ export const resources: readonly ResourceSpec[] = [
 ];
 
 export const rootCommands: readonly CommandSpec[] = [
+  {
+    name: "apply",
+    stage: "apply",
+    effect: "write",
+    summary:
+      "Apply a reviewed, fresh, environment-bound plan of any kind after explicit confirmation.",
+    flagsets: ["target", "output", "write", "destructive"],
+    positionals: [planFile],
+    outputs: tabular,
+    exits: {
+      1: "A data plan was applied and post-apply verification failed.",
+      7: "Operations remain or are blocked after a schema plan was applied.",
+    },
+  },
+  {
+    name: "verify",
+    stage: "apply",
+    effect: "read",
+    summary:
+      "Re-inspect the target and report whether a plan is satisfied, without writing.",
+    flagsets: ["target", "output"],
+    positionals: [planFile],
+    outputs: tabular,
+    exits: { 1: "The plan is not satisfied." },
+  },
   {
     name: "spec",
     stage: "other",

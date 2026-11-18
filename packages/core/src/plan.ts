@@ -1,3 +1,4 @@
+import type { PlanEffect } from "./plan-header.js";
 import {
   type Column,
   canonical,
@@ -85,6 +86,8 @@ export interface BlockedChange {
 
 export interface SchemaPlan {
   readonly planVersion: 1;
+  readonly kind: "schema";
+  readonly effect: PlanEffect;
   readonly provider: "dataverse";
   readonly environment: SchemaEnvironment;
   readonly mapping: DataverseMapping;
@@ -268,6 +271,8 @@ export async function planSchema(
   blocked.push(...components.blocked);
   return {
     planVersion: 1,
+    kind: "schema",
+    effect: "write",
     provider: "dataverse",
     environment,
     mapping,

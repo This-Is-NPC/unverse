@@ -35,13 +35,27 @@ which may be empty. External references are not portable seed relationships.
    and `limitations`. Apply only the reviewed JSON:
 
    ```sh
-   unverse seed apply --env dev --plan-file seed-plan.json --confirm --format json
+   unverse apply seed-plan.json --env dev --confirm --format json
    ```
+
+   The plan's `kind` is `data` and its `effect` is `write`; `apply` runs the
+   data executor from that. [Apply a reviewed plan](how-to-apply-schema.md)
+   covers the flags and exits shared by every plan.
 
    The synthetic integration verified counts, IDs, relationships, and declared
    values. A repeated satisfied plan returned checkpoint state `verified-resume`
    without sending another batch. Different existing rows block instead of
    being repaired, reseeded, or overwritten.
+
+3. Check the result without writing:
+
+   ```sh
+   unverse verify seed-plan.json --env dev --format json
+   ```
+
+   It exits 0 with `"satisfied": true` when every planned row exists and none
+   conflicts, and exits 1 with the remaining `create` and `blocked` lists
+   otherwise.
 
 ## What can go wrong
 

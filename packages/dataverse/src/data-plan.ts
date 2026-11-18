@@ -5,6 +5,7 @@ import {
   createManifest,
   type DataverseMapping,
   fingerprint,
+  type PlanEffect,
   parseManifest,
   parseMapping,
   physicalColumn,
@@ -23,6 +24,8 @@ import { exportTransfer } from "./transfer.js";
 
 export interface DataPlan {
   readonly dataPlanVersion: 1;
+  readonly kind: "data";
+  readonly effect: PlanEffect;
   readonly purpose: "seed" | "transfer";
   readonly environment: SchemaEnvironment;
   readonly mapping: DataverseMapping;
@@ -141,6 +144,8 @@ async function planData(
     );
   const body = {
     dataPlanVersion: 1 as const,
+    kind: "data" as const,
+    effect: "write" as const,
     purpose,
     environment,
     mapping,
@@ -159,20 +164,15 @@ async function planData(
   return { ...body, fingerprint: await fingerprint(body) };
 }
 
-export async function applyDataPlan(
+async function readDataPlan(
   client: DataverseClient,
   input: unknown,
   environment: SchemaEnvironment,
-  confirm: boolean,
 ) {
-  if (!confirm)
-    throw new DataverseError(
-      "invalid-input",
-      "Data apply requires explicit --confirm.",
-    );
   const value = record(input);
   if (
     value.dataPlanVersion !== 1 ||
+    value.kind !== "data" ||
     !["seed", "transfer"].includes(String(value.purpose)) ||
     canonical(value.environment) !== canonical(environment)
   )
@@ -194,6 +194,39 @@ export async function applyDataPlan(
     environment,
     value.purpose as "seed" | "transfer",
     String(value.policyFingerprint),
+  );
+  return { manifest, mapping, expected };
+}
+
+export async function verifyDataPlan(
+  client: DataverseClient,
+  input: unknown,
+  environment: SchemaEnvironment,
+) {
+  const { expected } = await readDataPlan(client, input, environment);
+  return {
+    kind: "data" as const,
+    satisfied: expected.create.length === 0 && expected.blocked.length === 0,
+    create: expected.create,
+    blocked: expected.blocked,
+  };
+}
+
+export async function applyDataPlan(
+  client: DataverseClient,
+  input: unknown,
+  environment: SchemaEnvironment,
+  confirm: boolean,
+) {
+  if (!confirm)
+    throw new DataverseError(
+      "invalid-input",
+      "Data apply requires explicit --confirm.",
+    );
+  const { manifest, mapping, expected } = await readDataPlan(
+    client,
+    input,
+    environment,
   );
   if (expected.blocked.length)
     throw new DataverseError(

@@ -24,9 +24,12 @@ try {
     if (scene.name === "19-seed-plan" || scene.name === "20-transfer-plan") {
       const file = `${scene.name}.json`;
       writeFileSync(resolve(consumer.directory, file), JSON.stringify(result));
-      const output = JSON.parse(run(consumer.executable, [scene.name === "19-seed-plan" ? "seed" : "transfer", "apply", "--env", "dev", "--plan-file", file, "--confirm", "--format", "json"], consumer.directory, scene.name === "19-seed-plan" ? { ...environment, FIXTURE_DATA_FILE: resolve(consumer.directory, "seed-data.json") } : environment));
+      const planEnvironment = scene.name === "19-seed-plan" ? { ...environment, FIXTURE_DATA_FILE: resolve(consumer.directory, "seed-data.json") } : environment;
+      const output = JSON.parse(run(consumer.executable, ["apply", file, "--env", "dev", "--confirm", "--format", "json"], consumer.directory, planEnvironment));
       assert.equal(output.status, "ok");
       assert.equal(output.data.checkpoint.state, "verified-resume");
+      const verified = JSON.parse(run(consumer.executable, ["verify", file, "--env", "dev", "--format", "json"], consumer.directory, planEnvironment));
+      assert.equal(verified.data.satisfied, true);
     }
   }
   const csv = run(consumer.executable, ["app", "list", "--env", "dev", "--format", "csv"], consumer.directory, environment);
@@ -34,7 +37,7 @@ try {
   const listed = JSON.parse(run(consumer.executable, ["env", "list", "--format", "json"], consumer.directory));
   assert.deepEqual(listed.data.environments.map((entry) => entry.name), ["test", "dev"]);
   const spec = JSON.parse(run(consumer.executable, ["spec", "--format", "json"], consumer.directory));
-  assert.ok(spec.commands.some((command) => command.path === "schema apply" && command.effect === "write"));
+  assert.ok(spec.commands.some((command) => command.path === "apply" && command.effect === "write"));
   await withPostgres(async (connection) => {
     const postgres = `postgresql://unverse@localhost/postgres?host=${encodeURIComponent(connection.host)}&sslmode=disable`;
     const env = { ...environment, FIXTURE_POSTGRES: postgres };

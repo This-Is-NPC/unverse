@@ -48,14 +48,16 @@ identifiers and every permitted copied field have been reviewed and authorized.
 2. Review all proposed rows and apply with confirmation:
 
    ```sh
-   unverse transfer apply --env test --plan-file transfer-plan.json --confirm --format json
+   unverse apply transfer-plan.json --env test --confirm --format json
    ```
 
    The same guarded data executor as seed creates rows before links and checks
    modeled invariants afterward. Existing identical rows are no-ops; existing
    different rows are blocks. Unrelated target records are not deleted or
    updated. The returned report records counts, identity maps, differences,
-   and a changeset-level checkpoint.
+   and a changeset-level checkpoint. `unverse verify transfer-plan.json --env
+   test` re-checks the plan afterwards without writing and exits 1 while rows
+   are missing or conflicting.
 
 ## What can go wrong
 

@@ -168,27 +168,6 @@ Plan additive metadata changes and report blocked operations.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--model-file <path>` (required): Read the versioned logical schema model.
 
-## schema apply
-
-Apply an explicitly confirmed, fresh, environment-bound schema plan.
-
-- Effect: `write`
-- Output formats: `human` (default), `json`, `csv`
-
-`unverse schema apply [--config <path>] --env <name> [--format <human|json|csv>] --confirm --plan-file <path>`
-
-### Flags
-
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
-- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--confirm` (required): Explicitly authorize the reviewed writes.
-- `--plan-file <path>` (required): Read a reviewed plan or its JSON result envelope.
-
-### Exit codes
-
-- `7`: Operations remain or are blocked after the reviewed plan was applied.
-
 ## solution list
 
 Find solutions by display or unique name.
@@ -536,27 +515,6 @@ Generate deterministic fixture IDs and review create-only data operations.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--seed-file <path>` (required): Read a versioned declarative seed with keyed rows.
 
-## seed apply
-
-Apply a reviewed seed plan as one bounded atomic changeset.
-
-- Effect: `write`
-- Output formats: `human` (default), `json`, `csv`
-
-`unverse seed apply [--config <path>] --env <name> [--format <human|json|csv>] --confirm --plan-file <path>`
-
-### Flags
-
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
-- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--confirm` (required): Explicitly authorize the reviewed writes.
-- `--plan-file <path>` (required): Read a reviewed plan or its JSON result envelope.
-
-### Exit codes
-
-- `1`: Post-apply verification failed.
-
 ## transfer plan
 
 Review a policy-filtered Dataverse-to-Dataverse create-only transfer.
@@ -574,27 +532,6 @@ Review a policy-filtered Dataverse-to-Dataverse create-only transfer.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--manifest-file <path>` (required): Read a canonical transfer manifest or its result envelope.
 - `--policy-file <path>` (required): Require an explicit copy or constant rule for every non-key field.
-
-## transfer apply
-
-Apply a reviewed transfer without deleting or overwriting existing rows.
-
-- Effect: `write`
-- Output formats: `human` (default), `json`, `csv`
-
-`unverse transfer apply [--config <path>] --env <name> [--format <human|json|csv>] --confirm --plan-file <path>`
-
-### Flags
-
-- `--config <path>`: Read configuration instead of unverse.config.json.
-- `--env <name>` (required): Select a named environment profile.
-- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--confirm` (required): Explicitly authorize the reviewed writes.
-- `--plan-file <path>` (required): Read a reviewed plan or its JSON result envelope.
-
-### Exit codes
-
-- `1`: Post-apply verification failed.
 
 ## pg export
 
@@ -653,6 +590,55 @@ Verify identities, relationships, decimals, and temporal values in PostgreSQL.
 ### Exit codes
 
 - `1`: Verification failed.
+
+## apply
+
+Apply a reviewed, fresh, environment-bound plan of any kind after explicit confirmation.
+
+- Effect: `write`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse apply <plan-file> [--config <path>] --env <name> [--format <human|json|csv>] --confirm [--destructive]`
+
+### Arguments
+
+- `<plan-file>`: Read a reviewed plan or its JSON result envelope.
+
+### Flags
+
+- `--config <path>`: Read configuration instead of unverse.config.json.
+- `--env <name>` (required): Select a named environment profile.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+- `--confirm` (required): Explicitly authorize the reviewed writes.
+- `--destructive`: Authorize a plan whose effect is destructive; the invocation is then destructive.
+
+### Exit codes
+
+- `1`: A data plan was applied and post-apply verification failed.
+- `7`: Operations remain or are blocked after a schema plan was applied.
+
+## verify
+
+Re-inspect the target and report whether a plan is satisfied, without writing.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse verify <plan-file> [--config <path>] --env <name> [--format <human|json|csv>]`
+
+### Arguments
+
+- `<plan-file>`: Read a reviewed plan or its JSON result envelope.
+
+### Flags
+
+- `--config <path>`: Read configuration instead of unverse.config.json.
+- `--env <name>` (required): Select a named environment profile.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+
+### Exit codes
+
+- `1`: The plan is not satisfied.
 
 ## spec
 

@@ -235,7 +235,7 @@ export const scenes = [
     render: "svg",
   },
   { name: "29-env-list", args: ["env", "list"] },
-  { name: "30-command-help", args: ["schema", "apply", "--help"] },
+  { name: "30-command-help", args: ["apply", "--help"] },
   { name: "31-artifact-types", args: ["artifact", "types"] },
   {
     name: "32-artifact-list",

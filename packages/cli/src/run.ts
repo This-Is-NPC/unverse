@@ -18,14 +18,14 @@ import {
   parseModel,
   planSchema,
   type Result,
+  readPlanHeader,
   record,
   redactText,
   SchemaError,
   selectEnvironment,
 } from "@unverse/core";
 import {
-  applyDataPlan,
-  applySchema,
+  applyPlan,
   apps,
   compareEnvironments,
   connectionReferences,
@@ -50,6 +50,7 @@ import {
   userRoles,
   users,
   variables,
+  verifyPlan,
 } from "@unverse/dataverse";
 import type { PostgresStore } from "@unverse/postgres";
 import { InputError, parseInvocation, requestsJson } from "./arguments.js";
@@ -68,6 +69,15 @@ export interface CliRuntime {
     name: string,
   ) => DataverseClient;
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
+}
+
+function unwrap(input: Record<string, unknown>): unknown {
+  return input.outputVersion === outputVersion ? input.data : input;
+}
+
+async function readPlan(runtime: CliRuntime, path: string) {
+  const document = unwrap(record(JSON.parse(await runtime.readFile(path))));
+  return { document, ...readPlanHeader(document) };
 }
 
 async function readMapping(
@@ -185,9 +195,7 @@ export async function runCli(
       const input = record(
         JSON.parse(await runtime.readFile(flags.get("--manifest-file") ?? "")),
       );
-      const manifest = await parseManifest(
-        input.outputVersion === outputVersion ? input.data : input,
-      );
+      const manifest = await parseManifest(unwrap(input));
       if (
         manifest.source.environment.url !== profile.url ||
         manifest.source.environment.name !== environmentName
@@ -226,6 +234,18 @@ export async function runCli(
         await store.close();
       }
     }
+    const plan =
+      command === "apply" || command === "verify"
+        ? await readPlan(runtime, positionals.get("plan-file") ?? "")
+        : undefined;
+    if (
+      command === "apply" &&
+      plan?.effect === "destructive" &&
+      !flags.has("--destructive")
+    )
+      throw new InputError(
+        "The plan is destructive; apply it only with --destructive.",
+      );
     stage = "token and WhoAmI";
     if (runtime.connect === undefined)
       throw new DataverseError(
@@ -243,12 +263,6 @@ export async function runCli(
       command === "schema plan" || command === "pg export"
         ? parseModel(
             JSON.parse(await runtime.readFile(flags.get("--model-file") ?? "")),
-          )
-        : undefined;
-    const inputPlan =
-      command === "schema apply"
-        ? record(
-            JSON.parse(await runtime.readFile(flags.get("--plan-file") ?? "")),
           )
         : undefined;
     const identity = await client.whoAmI();
@@ -388,11 +402,35 @@ export async function runCli(
         runtime,
       );
     }
-    if (
-      ["seed plan", "seed apply", "transfer plan", "transfer apply"].includes(
-        command,
-      )
-    ) {
+    if (plan !== undefined) {
+      const context = {
+        ...environment,
+        organizationId: identity.organizationId,
+      };
+      const outcome =
+        command === "apply"
+          ? await applyPlan(client, plan.document, context, true)
+          : await verifyPlan(client, plan.document, context);
+      return emit(
+        {
+          ...base,
+          caller: { id: identity.applicationUserId, kind: "application-user" },
+          status: outcome.status,
+          data: outcome.report,
+          evidence: [
+            "The reviewed plan was bound to the selected environment and the target was re-inspected.",
+          ],
+          coverage: {
+            complete: outcome.status === "ok",
+            limitations: (record(outcome.report).limitations ??
+              []) as readonly string[],
+          },
+        },
+        format,
+        runtime,
+      );
+    }
+    if (["seed plan", "transfer plan"].includes(command)) {
       const context = {
         ...environment,
         organizationId: identity.organizationId,
@@ -404,7 +442,7 @@ export async function runCli(
           JSON.parse(await runtime.readFile(flags.get("--seed-file") ?? "")),
           context,
         );
-      else if (command === "transfer plan") {
+      else {
         const input = record(
           JSON.parse(
             await runtime.readFile(flags.get("--manifest-file") ?? ""),
@@ -412,33 +450,21 @@ export async function runCli(
         );
         data = await planDataverseTransfer(
           client,
-          input.outputVersion === outputVersion ? input.data : input,
+          unwrap(input),
           JSON.parse(await runtime.readFile(flags.get("--policy-file") ?? "")),
           await readMapping(runtime, flags),
           context,
         );
-      } else {
-        const input = record(
-          JSON.parse(await runtime.readFile(flags.get("--plan-file") ?? "")),
-        );
-        const plan = record(
-          input.outputVersion === outputVersion ? input.data : input,
-        );
-        if (plan.purpose !== (command === "seed apply" ? "seed" : "transfer"))
-          throw new InputError(
-            "The plan purpose does not match the apply command.",
-          );
-        data = await applyDataPlan(client, plan, context, true);
       }
       const report = record(data);
       return emit(
         {
           ...base,
           caller: { id: identity.applicationUserId, kind: "application-user" },
-          status: report.verified === false ? "failed" : "ok",
+          status: "ok",
           data,
           evidence: [
-            "The target schema, data state, and explicit write guards were checked.",
+            "The target schema and data state were read to plan create-only operations.",
           ],
           coverage: {
             complete: true,
@@ -577,39 +603,27 @@ export async function runCli(
         organizationId: identity.organizationId,
       };
       const data =
-        inputPlan !== undefined
-          ? await applySchema(
-              client,
-              inputPlan.data ?? inputPlan,
+        mapping !== undefined && model !== undefined
+          ? await planSchema(
+              model,
+              mapping,
               schemaEnvironment,
-              true,
+              await inspectSchema(client, mapping, model),
             )
-          : mapping !== undefined && model !== undefined
-            ? await planSchema(
-                model,
-                mapping,
-                schemaEnvironment,
-                await inspectSchema(client, mapping, model),
-              )
-            : mapping !== undefined
-              ? await inspectSchema(client, mapping)
-              : undefined;
-      const unfinished =
-        command === "schema apply" &&
-        ["operations", "blocked", "unverified"].some(
-          (field) => (record(data)[field] as readonly unknown[]).length !== 0,
-        );
+          : mapping !== undefined
+            ? await inspectSchema(client, mapping)
+            : undefined;
       return emit(
         {
           ...base,
           caller: { id: identity.applicationUserId, kind: "application-user" },
-          status: unfinished ? "inconclusive" : "ok",
+          status: "ok",
           data,
           evidence: [
             "Metadata inspected in the selected environment; apply rechecks the reviewed state before writing.",
           ],
           coverage: {
-            complete: !unfinished,
+            complete: true,
             limitations: [
               "Only additive changes are supported. Dataverse required fields are application-level, not a server-side NOT NULL guarantee.",
             ],

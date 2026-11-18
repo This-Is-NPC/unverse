@@ -35,7 +35,7 @@ tarballs; no npm publication is implied.
 | How do I repeat a paginated read? | [Query records](how-to-query-records.md) |
 | What exists under a mapped prefix? | [Inspect schema](how-to-inspect-schema.md) |
 | Which schema changes are safe? | [Plan schema](how-to-plan-schema.md) |
-| How do I apply a reviewed plan? | [Apply schema](how-to-apply-schema.md) |
+| How do I apply a reviewed plan? | [Apply a reviewed plan](how-to-apply-schema.md) |
 | How do I export modeled rows? | [Export data](how-to-export-data.md) |
 | How do I import without overwriting existing tables? | [Import data](how-to-import-data.md) |
 | How do I check transfer equivalence? | [Verify transfer](how-to-verify-transfer.md) |

@@ -118,13 +118,14 @@ Every command is `unverse <group> <command>` or the root command
 | `config` | `check` validates one local profile without contacting Dataverse |
 | `env` | `list` shows configured profiles offline; `whoami` reports organization, caller, and business unit; `doctor` reports configuration, token, and WhoAmI checks; `compare` compares two profiles |
 | `table`, `record` | `table list` finds table metadata; `record query <table>` runs a paginated OData read |
-| `schema` | `inspect`, `plan`, and `apply` for additive metadata |
+| `schema` | `inspect` and `plan` for additive metadata |
 | `solution`, `app`, `flow`, `variable`, `connector`, `connref` | Read-only inventories; `solution show <solution-id>` and `connref show <reference-id>` inspect one item |
 | `artifact` | `types` prints the built-in artifact catalog offline; `list <type>` reads one type as normalized items (§19) |
 | `user`, `role` | `user list`, `user show` (direct and team roles), and `role check` |
 | `deps` | `list`, `graph`, and `impact` dependency evidence |
-| `seed`, `transfer` | `plan` and `apply` for fixture data and Dataverse-to-Dataverse transfer |
+| `seed`, `transfer` | `plan` for fixture data and Dataverse-to-Dataverse transfer |
 | `pg` | `export`, `import`, and `verify` for the PostgreSQL transfer |
+| `apply`, `verify` | Execute or re-check any reviewed plan file: `apply <plan-file>` writes, `verify <plan-file>` reads |
 
 `env whoami` reports organization, caller, and business unit identifiers
 returned by Dataverse. `env doctor` does not probe table, role, or record
@@ -158,6 +159,10 @@ only the formats they support: `csv` where the result has rows, and `html`,
 
 An informational, fully completed empty list is successful. A presence check
 over that same list fails with exit 1.
+
+`apply` exits 7 when a schema plan leaves operations, blocked changes, or
+unverified keys after it ran, and 1 when a data plan's post-write verification
+fails. `verify` exits 1 when the plan is not satisfied.
 
 ## 9. Role diagnostics
 
@@ -229,9 +234,8 @@ Choices, money, files, and polymorphic lookups are classified before mappings
 are introduced. Unknown or unsupported capabilities remain visible in reports;
 they do not disappear or become strings silently.
 
-`schema inspect`, `schema plan`, and `schema apply` inspect
-metadata, compare normalized snapshots, and apply only supported additive
-changes. Applying requires confirmation, an exact environment binding, and a
+`schema inspect` and `schema plan` inspect metadata and compare normalized
+snapshots; `apply` (§14) applies only supported additive changes. Applying requires confirmation, an exact environment binding, and a
 fresh observed-state fingerprint. Destructive changes stay blocked.
 
 ## 12. PostgreSQL and transfer
@@ -342,10 +346,29 @@ type that cannot be filtered (multiline, lookups, files) is not read and is
 `unknown`. A permission or service failure on the read is `unknown` with the
 error as evidence, never `false`; an authentication failure stops the
 command. Nothing is removed. The read needs the model, so `schema inspect`
-does not run it; `schema plan` and `schema apply` do, and the result is part of
+does not run it; `schema plan` and `apply` of a schema plan do, and the result is part of
 the compared plan. Dataverse RequiredLevel is an
 application-level rule, not an SQL NOT NULL guarantee. That limitation appears
 in plan and apply results. SQL schema inference is not used.
+
+Every plan document is self-describing. Besides its environment binding and
+fingerprints it carries `kind` (`schema` or `data`) and `effect` (`write` or
+`destructive`). Both are part of what apply recomputes and compares, so a
+plan whose kind or effect was edited is rejected as modified. Schema plans and
+data plans (seed and transfer, §16) are the two kinds; every plan written today
+has effect `write`. `effect: "destructive"` is reserved for plans that remove
+or overwrite: `apply` refuses such a plan unless the invocation also passes
+`--destructive`; the check runs before the first request.
+
+`unverse apply <plan-file> --env <name> --confirm` is the only way to execute
+a plan. It reads the plan (the bare plan or the result envelope that
+`schema plan`, `seed plan`, or `transfer plan` printed), dispatches by `kind`
+to the guarded executor, and resolves the environment independently of the
+plan. `unverse verify <plan-file> --env <name>` re-inspects the target without
+writing and reports `satisfied`; it exits 1 when operations remain or are
+blocked. For a schema plan it rebuilds the plan from the plan's own model and
+mapping; for a data plan it rebuilds the creates and conflicts after checking the
+plan's fingerprint and environment binding.
 
 Apply requires explicit confirmation and an independently resolved current
 environment. It re-inspects metadata, deterministically rebuilds the plan,
@@ -534,7 +557,8 @@ organizations must differ; source rereading and continuous sync are not implied.
 
 Both use one data plan/executor. Plans bind transformed data, target identity,
 current target fingerprint, proposed creates, conflicts, and policy fingerprint.
-Apply requires confirmation, validates plan integrity, re-authenticates the
+`apply` requires confirmation, validates plan integrity (the plan has `kind`
+`data` and `effect`, covered by its fingerprint), re-authenticates the
 target and rechecks current state. Existing differing rows are blocked. A
 satisfied plan is verified without writes; an unsatisfied stale plan is rejected.
 
@@ -643,9 +667,10 @@ and [connectors](https://learn.microsoft.com/en-us/power-apps/developer/data-pla
 
 ## 18. Command model
 
-Unverse commands follow one loop: observe, plan, apply. Observe commands
+Unverse commands follow one loop: observe, plan, review, apply. Observe commands
 read an environment and report evidence. Plan commands read and produce a
-reviewable document. Apply commands change an environment or a database and
+reviewable, self-describing document. `apply` and `verify` are the only
+commands that take a plan; there is no per-resource apply. Apply commands change an environment or a database and
 only from a reviewed plan. Help groups commands under OBSERVE, PLAN, APPLY,
 and OTHER for offline commands such as `config check`, `env list`, and `spec`.
 
@@ -657,15 +682,17 @@ once and reused, positionals for one required identity, exactly-one-of groups,
 choices for values, and one document tools can read. Each command declares:
 
 - `effect`: `read`, `write`, or `destructive`. There is no default. Writing an
-  output the user asked for is still `read`. `schema apply`, `seed apply`,
-  `transfer apply`, and `pg import` are `write`; no command is `destructive`
-  yet. A command that is not `read` carries the `write` flagset, whose
-  `--confirm` is required.
+  output the user asked for is still `read`. `apply` and `pg import` are
+  `write`; `verify` is `read`. The effect of an `apply` invocation is the
+  larger of the command's and the plan's: a plan with `effect: "destructive"`
+  needs the `destructive` flagset's `--destructive` and fails with exit 2
+  before any request without it. No plan is destructive yet. A command that is
+  not `read` carries the `write` flagset, whose `--confirm` is required.
 - flagsets: `target` (`--env`, `--config`), `output` (`--format`), `write`
-  (`--confirm`), and shared sets for search, publisher mapping, user selection,
+  (`--confirm`), `destructive` (`--destructive`), and shared sets for search, publisher mapping, user selection,
   and dependency scope. Flags specific to one command sit on the command.
 - positionals: one required resource identity, such as the table of
-  `record query <table>`.
+  `record query <table>` or the plan file of `apply <plan-file>`.
 - groups: exactly-one-of constraints, such as the user selector and the role
   selector. The parser enforces them; commands do not validate by hand.
 - outputs: the allowed `--format` values, default `human`.

@@ -91,11 +91,11 @@ The read-only fixture plans two entities, explicit mappings, and a relationship.
 
 ![Schema plan](img/10-schema-plan.png)
 
-## 11. Schema apply
+## 11. Apply
 
 There is no persistent apply screen or confirmation dialog. The operator must
-pass `--confirm` explicitly; the one-shot JSON result reports the re-inspected
-plan. The picture task does not perform schema writes. The dedicated DEV
+pass `--confirm` explicitly to `unverse apply <plan-file>`; the one-shot JSON
+result reports the re-inspected plan. The picture task does not perform schema writes. The dedicated DEV
 fixture check exercises apply, an additive field, and idempotence separately.
 
 ## 12. PostgreSQL export
@@ -169,10 +169,10 @@ The installed fixture's target is already satisfied, so no creates are needed.
 
 ![Transfer plan](img/20-transfer-plan.png)
 
-## 23. Seed and Dataverse transfer apply
+## 23. Applying seed and Dataverse transfer plans
 
-Neither has a persistent screen or interactive confirmation dialog. Both
-require `--confirm` and print verification with a changeset checkpoint. The
+Neither has a persistent screen or interactive confirmation dialog. `apply`
+of either plan requires `--confirm` and print verification with a changeset checkpoint. The
 picture renderer does not issue writes. Installed-package checks exercise
 satisfied-plan resume, while synthetic integration exercises creates and links.
 CSV is an output format for these same commands, not another screen.

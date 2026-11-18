@@ -171,11 +171,12 @@ export async function applySchema(
   if (!confirm)
     throw new DataverseError(
       "invalid-input",
-      "schema apply requires explicit --confirm.",
+      "Applying a schema plan requires explicit --confirm.",
     );
   const value = record(input);
   if (
     value.planVersion !== 1 ||
+    value.kind !== "schema" ||
     value.provider !== "dataverse" ||
     canonical(value.environment) !== canonical(environment)
   )

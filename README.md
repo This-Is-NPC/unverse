@@ -94,7 +94,6 @@ can allowlist the `read` commands.
 | `record query <table>` | Run a paginated read |
 | `schema inspect` | Inspect an explicitly mapped namespace |
 | `schema plan` | Review additive operations and blocked changes |
-| `schema apply` | Apply a confirmed, fresh, environment-bound plan |
 | `pg export` | Export a compatible modeled dataset |
 | `pg import` | Create and verify an owned PostgreSQL schema |
 | `pg verify` | Compare a committed target with its manifest |
@@ -103,8 +102,10 @@ can allowlist the `read` commands.
 | `artifact types` / `artifact list <type>` | Show the built-in artifact catalog offline; list one type as normalized items |
 | `user list` | Find exact user identifiers for role investigation |
 | `variable list` | Inspect masked settings |
-| `seed plan` / `seed apply` | Create deterministic, reviewed development fixtures |
-| `transfer plan` / `transfer apply` | Review and apply a create-only Dataverse transfer |
+| `seed plan` | Review deterministic development fixtures |
+| `transfer plan` | Review a create-only Dataverse transfer |
+| `apply <plan-file>` | Apply a confirmed, fresh, environment-bound schema, seed, or transfer plan |
+| `verify <plan-file>` | Check without writing whether a plan is satisfied |
 | `connector list` | Inspect visible solution-aware connector metadata |
 | `connref list` / `connref show <reference-id>` | Inspect bindings without claiming health |
 | `deps list` / `deps graph` / `deps impact` | Explore declared dependencies and potential impact |
@@ -128,7 +129,7 @@ are bundled.
 - Row caps report incomplete coverage instead of proving total counts.
 - Metadata substring search is performed locally because the metadata API
   does not support `contains`.
-- Schema apply is additive, is not an atomic multi-request transaction, and
+- Applying a schema plan is additive, is not an atomic multi-request transaction, and
   never retries writes automatically. Inspect and re-plan after a failure.
   Required fields are application-level in Dataverse, not server-side NOT NULL
   guarantees. See [schema limits](docs/design.md#14-schema-model-and-safety).
