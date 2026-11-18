@@ -32,6 +32,10 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
    lists after inspection. Reapplying the satisfied plan created no duplicate
    structure. Unknown post-apply state reports incomplete coverage, not success.
 
+   Reviewed environment variable definitions and connection references are
+   created in the mapped solution, in the same run. Apply creates no variable
+   values and no connections; bind those in the environment afterwards.
+
 3. After an alternate key is created Dataverse builds its index in the
    background. Apply waits up to 300 seconds. If the index is still not
    `Active`, the command exits 7 with status `inconclusive`, and `unverified`

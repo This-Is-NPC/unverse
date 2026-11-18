@@ -3,6 +3,7 @@ import {
   canonical,
   type DataverseMapping,
   type Entity,
+  isSolutionComponentOperation,
   type Key,
   type ObservedColumn,
   type ObservedKey,
@@ -21,6 +22,10 @@ import {
 } from "@unverse/core";
 import { type DataverseClient, DataverseError } from "./client.js";
 import { endpoint, guid, identifier, literal, text } from "./odata.js";
+import {
+  createSolutionComponents,
+  inspectSolutionComponents,
+} from "./solution-components.js";
 
 export async function inspectSchema(
   client: DataverseClient,
@@ -141,7 +146,9 @@ export async function inspectSchema(
           primaryKey: text(target.rows[0] ?? {}, "PrimaryIdAttribute"),
         });
     }
+  const solutionComponents = await inspectSolutionComponents(client, mapping);
   return {
+    ...(solutionComponents === undefined ? {} : { solutionComponents }),
     entities: entities.sort((a, b) => a.name.localeCompare(b.name)),
     ...(model?.entities.some((entity) =>
       entity.columns.some((column) => column.externalReference !== undefined),
@@ -221,6 +228,7 @@ export async function applySchema(
   const relationships: { entity: Entity; column: Column }[] = [];
   const keys: { entity: Entity; key: Key }[] = [];
   for (const operation of expected.operations) {
+    if (isSolutionComponentOperation(operation)) continue;
     const entity = model.entities.find(
       (candidate) => candidate.name === operation.entity,
     );
@@ -358,6 +366,12 @@ export async function applySchema(
   }
   for (const { entity, key } of keys)
     await createKey(client, mapping, entity, key, headers);
+  await createSolutionComponents(
+    client,
+    mapping,
+    expected.operations.filter(isSolutionComponentOperation),
+    headers,
+  );
   return planSchema(
     model,
     mapping,

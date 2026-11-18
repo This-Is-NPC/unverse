@@ -399,6 +399,47 @@ External targets are read, not provisioned or modified. An external relationship
 is metadata-only: seed, portable export/import, and equivalence checks reject
 external references. Model related entities explicitly for portable datasets.
 
+Two Dataverse solution components are declared in the mapping document, not in
+the portable model, so PostgreSQL ignores them:
+
+```json
+{
+  "prefix": "uv",
+  "solution": "UnverseFixture",
+  "environmentVariables": [
+    {
+      "schemaName": "uv_ApiUrl",
+      "displayName": "API URL",
+      "type": "text",
+      "defaultValue": "https://api.example.test"
+    }
+  ],
+  "connectionReferences": [
+    { "displayName": "Office 365-Users", "connector": "shared_office365users" }
+  ]
+}
+```
+
+An environment variable definition schema name starts with the mapping prefix
+and an underscore and is unique ignoring case. Only `text` is supported; other
+types are rejected. The plan creates an absent definition (type String,
+`100000000`) inside the mapped solution, treats an equal one (display name,
+type, default value) as satisfied, and blocks a different one: definitions are
+never modified. `environmentvariablevalues` are never read, created or
+changed. Inspection compares the default value in memory and keeps only an
+equal-or-differs flag, so neither the plan nor its fingerprint carries an
+existing default value (§16).
+
+A connection reference logical name is derived like the maker portal: the
+prefix, an underscore, and the display name with hyphens and whitespace
+removed and casing kept (`Office 365-Users` becomes `uv_Office365Users`). The
+connector id is `/providers/Microsoft.PowerApps/apis/<connector>`. Derived
+names must be unique. The plan creates an absent reference without a
+connection, treats one with the same connector as satisfied without reading its
+connection, and blocks one with a different connector. Connections are never
+created or bound. Apply creates both components with the solution header in
+the same guarded run as the schema operations.
+
 ## 15. Transfer contract and PostgreSQL
 
 The original portable direction is Dataverse → PostgreSQL; Dataverse targets

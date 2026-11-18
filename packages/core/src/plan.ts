@@ -9,6 +9,11 @@ import {
   physicalKey,
   type SchemaModel,
 } from "./schema.js";
+import {
+  type ObservedSolutionComponents,
+  planSolutionComponents,
+  type SolutionComponentOperation,
+} from "./solution-components.js";
 
 export interface SchemaEnvironment {
   readonly name: string;
@@ -42,6 +47,7 @@ export interface ObservedEntity {
 }
 
 export interface SchemaSnapshot {
+  readonly solutionComponents?: ObservedSolutionComponents;
   readonly entities: readonly ObservedEntity[];
   readonly externalTargets?: readonly {
     readonly table: string;
@@ -67,7 +73,8 @@ export type SchemaOperation =
       readonly kind: "create-key";
       readonly entity: string;
       readonly key: string;
-    };
+    }
+  | SolutionComponentOperation;
 
 export interface BlockedChange {
   readonly path: string;
@@ -252,6 +259,13 @@ export async function planSchema(
         reason: "Removing an existing mapped entity is blocked.",
       });
   }
+  const components = planSolutionComponents(
+    mapping.prefix,
+    mapping,
+    snapshot.solutionComponents,
+  );
+  operations.push(...components.operations);
+  blocked.push(...components.blocked);
   return {
     planVersion: 1,
     provider: "dataverse",

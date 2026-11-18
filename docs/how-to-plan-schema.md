@@ -102,6 +102,37 @@ supported types and a 1:N relationship. See
    no rows; row-level security can hide rows from it. Multiline text and
    other columns that cannot be filtered are always `"unknown"`.
 
+6. Optionally declare solution components in the mapping document (see
+   [the design](design.md#14-schema-model-and-safety)): text environment
+   variable definitions (`environmentVariables`) and connection references
+   (`connectionReferences`). Against a synthetic environment where neither
+   exists, planning listed:
+
+   ```json
+   {
+     "operations": [
+       { "kind": "create-environment-variable", "schemaName": "uv_ApiUrl" },
+       { "kind": "create-connection-reference", "logicalName": "uv_Office365Users" }
+     ],
+     "blocked": []
+   }
+   ```
+
+   Where a definition already exists with another display name, type or
+   default value, the plan blocks it and never shows the existing default
+   value:
+
+   ```json
+   {
+     "path": "environmentVariables.uv_ApiUrl",
+     "reason": "Existing environment variable definition differs in display name, type or default value; definitions are never modified."
+   }
+   ```
+
+   A reference with the same connector is satisfied; one with another
+   connector is blocked. Variable values and connections are never read or
+   changed.
+
 ## What can go wrong
 
 Planning is informational: exit 0 does not mean every listed change can be

@@ -133,6 +133,18 @@ mutations.push(
   ["data-holds", "dataverse/schema.js", "holdsData: rows.rows.length !== 0,", "holdsData: false,", "dataverse", "blocked column removals record whether the column holds data", "schema"],
 );
 
+mutations.push(
+  ["component-prefix", "core/solution-components.js", "!value.schemaName.startsWith(", "false && !value.schemaName.startsWith(", "dataverse", "solution component mappings validate prefixes, names and types", "solution-components"],
+  ["component-name-case", "core/solution-components.js", '.replace(/[-\\s]/g, "")', '.replace(/[-\\s]/g, "").toLowerCase()', "dataverse", "connection reference names drop hyphens and whitespace but keep casing", "solution-components"],
+  ["component-modify", "core/solution-components.js", "!existing.defaultMatches", "false", "dataverse", "differing environment variables and connectors block without modification", "solution-components"],
+  ["component-connector", "core/solution-components.js", "existing.connectorId !== connectorId(reference.connector)", "false", "dataverse", "differing environment variables and connectors block without modification", "solution-components"],
+  ["component-variable-type", "core/solution-components.js", "existing.providerType !== textVariableType ||", "false ||", "dataverse", "environment variables differing in type or display name block", "solution-components"],
+  ["component-variable-name", "core/solution-components.js", "existing.displayName !== variable.displayName ||", "false ||", "dataverse", "environment variables differing in type or display name block", "solution-components"],
+  ["component-unset-default", "dataverse/solution-components.js", '(nullableText(rows, "defaultvalue") ?? undefined)', 'nullableText(rows, "defaultvalue")', "dataverse", "a variable without a default is satisfied by a definition without one", "solution-components"],
+  ["component-header", "dataverse/solution-components.js", "connectorid: connectorId(reference.connector),\n            }, headers);", "connectorid: connectorId(reference.connector),\n            }, {});", "dataverse", "component creation uses the solution header and writes no values or connections", "solution-components"],
+  ["component-absent", "core/solution-components.js", "operations.push({ kind: \"create-connection-reference\", logicalName });", "void logicalName;", "dataverse", "solution components are created when absent and satisfied when equal", "solution-components"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

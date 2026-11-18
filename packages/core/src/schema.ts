@@ -1,3 +1,8 @@
+import {
+  parseSolutionComponents,
+  type SolutionComponents,
+} from "./solution-components.js";
+
 export type ColumnType =
   | "text"
   | "multiline"
@@ -47,7 +52,7 @@ export interface SchemaModel {
   readonly entities: readonly Entity[];
 }
 
-export interface DataverseMapping {
+export interface DataverseMapping extends SolutionComponents {
   readonly prefix: string;
   readonly solution: string;
 }
@@ -169,7 +174,12 @@ function parseKeys(input: unknown, columns: readonly Column[]): Key[] {
 
 export function parseMapping(input: unknown): DataverseMapping {
   const mapping = record(input);
-  keys(mapping, ["prefix", "solution"]);
+  keys(mapping, [
+    "prefix",
+    "solution",
+    "environmentVariables",
+    "connectionReferences",
+  ]);
   if (
     typeof mapping.prefix !== "string" ||
     !/^[a-z][a-z0-9]{1,7}$/.test(mapping.prefix)
@@ -182,7 +192,11 @@ export function parseMapping(input: unknown): DataverseMapping {
     !/^[a-zA-Z][a-zA-Z0-9_]{0,79}$/.test(mapping.solution)
   )
     fail("A solution unique name is required.");
-  return { prefix: mapping.prefix, solution: mapping.solution };
+  return {
+    prefix: mapping.prefix,
+    solution: mapping.solution,
+    ...parseSolutionComponents(mapping, mapping.prefix),
+  };
 }
 
 function parseColumn(input: unknown): Column {

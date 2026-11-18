@@ -58,6 +58,19 @@ export {
 } from "./schema.js";
 export { applyDataPolicy, buildSeed } from "./seed.js";
 export {
+  type ConnectionReference,
+  connectionReferenceName,
+  connectorId,
+  type EnvironmentVariableDefinition,
+  isSolutionComponentOperation,
+  type ObservedConnectionReference,
+  type ObservedEnvironmentVariable,
+  type ObservedSolutionComponents,
+  type SolutionComponentOperation,
+  type SolutionComponents,
+  textVariableType,
+} from "./solution-components.js";
+export {
   createManifest,
   type IdentityMap,
   parseManifest,
