@@ -128,6 +128,23 @@ const readers: Readonly<
     ),
 };
 
+export function checkLimit(limit: number | undefined): void {
+  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1))
+    throw new DataverseError(
+      "invalid-input",
+      "The row limit must be a positive safe integer.",
+    );
+}
+
+export function capItems<T>(
+  items: readonly T[],
+  limit: number | undefined,
+): { readonly items: readonly T[]; readonly complete: boolean } {
+  return limit === undefined || items.length <= limit
+    ? { items, complete: true }
+    : { items: items.slice(0, limit), complete: false };
+}
+
 export async function listArtifacts(
   client: DataverseClient,
   spec: ArtifactTypeSpec,
@@ -136,11 +153,7 @@ export async function listArtifacts(
   readonly items: readonly ArtifactItem[];
   readonly complete: boolean;
 }> {
-  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1))
-    throw new DataverseError(
-      "invalid-input",
-      "The row limit must be a positive safe integer.",
-    );
+  checkLimit(limit);
   const read = (readers as Record<string, (typeof readers)[ArtifactTypeName]>)[
     spec.type
   ];
@@ -149,8 +162,5 @@ export async function listArtifacts(
       "invalid-input",
       `Unknown artifact type ${spec.type}.`,
     );
-  const items = await read(client);
-  return limit === undefined || items.length <= limit
-    ? { items, complete: true }
-    : { items: items.slice(0, limit), complete: false };
+  return capItems(await read(client), limit);
 }

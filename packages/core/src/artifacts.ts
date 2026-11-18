@@ -37,12 +37,15 @@ export interface ArtifactTypeSpec {
   readonly idKind: "guid" | "logical-name";
   readonly fields: readonly ArtifactField[];
   readonly absent: readonly ArtifactAbsence[];
+  readonly componentType?: number;
 }
 
 const membership =
-  "Solution membership needs one solutioncomponents read per solution; the inventory does not make that read.";
+  "The inventory does not read solution membership; a declared type that needs it reads it once.";
 const publisherJoin =
-  "The publisher needs a join through the owning solution; the inventory does not make it.";
+  "The publisher comes from the owning solution; the inventory does not read it.";
+const unmappedMembership =
+  "The solution component type of this type is not mapped, so membership is not read.";
 const notRead = "The reader does not select this column.";
 
 export const artifactCatalog = [
@@ -60,6 +63,7 @@ export const artifactCatalog = [
       { field: "managed", reason: notRead },
       { field: "kind", reason: "Tables have no subtype in this catalog." },
     ],
+    componentType: 1,
   },
   {
     type: "canvas-app",
@@ -77,6 +81,7 @@ export const artifactCatalog = [
           "The canvasapps publisher column is free text from the app, not a Dataverse publisher.",
       },
     ],
+    componentType: 300,
   },
   {
     type: "model-driven-app",
@@ -95,6 +100,7 @@ export const artifactCatalog = [
         reason: "Model-driven apps have no subtype in this catalog.",
       },
     ],
+    componentType: 80,
   },
   {
     type: "cloud-flow",
@@ -108,6 +114,7 @@ export const artifactCatalog = [
       { field: "publisher", reason: publisherJoin },
       { field: "kind", reason: "Cloud flows have no subtype in this catalog." },
     ],
+    componentType: 29,
   },
   {
     type: "security-role",
@@ -129,6 +136,7 @@ export const artifactCatalog = [
       },
       { field: "kind", reason: "Roles have no subtype." },
     ],
+    componentType: 20,
   },
   {
     type: "connection-reference",
@@ -138,8 +146,8 @@ export const artifactCatalog = [
     idKind: "guid",
     fields: ["displayName", "managed"],
     absent: [
-      { field: "solution", reason: membership },
-      { field: "publisher", reason: publisherJoin },
+      { field: "solution", reason: unmappedMembership },
+      { field: "publisher", reason: unmappedMembership },
       { field: "owner", reason: notRead },
       { field: "kind", reason: "Connection references have no subtype." },
     ],
@@ -160,6 +168,7 @@ export const artifactCatalog = [
         reason: "Variable types are data types, not artifact subtypes.",
       },
     ],
+    componentType: 380,
   },
   {
     type: "solution",
@@ -190,8 +199,8 @@ export const artifactCatalog = [
     idKind: "guid",
     fields: ["displayName", "managed"],
     absent: [
-      { field: "solution", reason: membership },
-      { field: "publisher", reason: publisherJoin },
+      { field: "solution", reason: unmappedMembership },
+      { field: "publisher", reason: unmappedMembership },
       { field: "owner", reason: notRead },
       {
         field: "kind",

@@ -20,6 +20,7 @@ export {
   type DataPlan,
   planDesired,
 } from "./data-plan.js";
+export { checkDeclaredArtifacts, listDeclaredArtifacts } from "./declared.js";
 export { type DependencyOptions, dependencyGraph } from "./dependencies.js";
 export {
   apps,

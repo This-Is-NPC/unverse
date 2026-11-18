@@ -1,0 +1,18 @@
+{
+  "artifactsVersion": 1,
+  "types": {
+    "code-app": { "from": "canvas-app", "where": { "kind": "code-app" } },
+    "fixture-table": { "from": "table", "where": { "name": "tx_*" } }
+  },
+  "rules": {
+    "code-app": {
+      "name": "fixture_{app}",
+      "solution": "required",
+      "publisher": ["fx"]
+    },
+    "fixture-table": {
+      "name": "tx_{entity:lower}",
+      "solution": ["CommunityFixture"]
+    }
+  }
+}

@@ -89,6 +89,35 @@ test("discovers .unverse/config.json from a nested directory", async () => {
   });
 });
 
+test("discovers .unverse/artifacts.json from a nested directory", async () => {
+  await inProject(async (root) => {
+    const path = join(root, ".unverse", "artifacts.json");
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        artifactsVersion: 1,
+        types: { roles: { from: "security-role" } },
+      }),
+    );
+    const nested = join(root, "a", "b");
+    mkdirSync(nested, { recursive: true });
+    const { code, document } = await run(
+      ["artifact", "types", "--format", "json"],
+      nested,
+    );
+    assert.equal(code, 0);
+    assert.deepEqual(document.data.userTypes, [
+      { type: "roles", from: "security-role", where: {} },
+    ]);
+    assert.ok(
+      document.evidence.includes(
+        `Artifacts file ${path} found by searching up from ${nested}.`,
+      ),
+    );
+  });
+});
+
 test("the nearest .unverse/config.json wins", async () => {
   await inProject(async (root) => {
     writeConfig(root, "outer");

@@ -131,7 +131,10 @@ export function parseCommand(
     }
   }
   const declared = command.positionals ?? [];
-  const missing = declared.find((_, index) => words[index] === undefined);
+  const missing = declared.find(
+    (positional, index) =>
+      positional.optional !== true && words[index] === undefined,
+  );
   if (missing !== undefined)
     throw new InputError(`<${missing.name}> is required.`);
   if (words.length > declared.length)

@@ -1,5 +1,3 @@
-import { artifactTypeNames } from "@unverse/core";
-
 export type Effect = "read" | "write" | "destructive";
 export type Stage = "observe" | "plan" | "apply" | "other";
 export type Format = "human" | "json" | "csv" | "html" | "mermaid" | "svg";
@@ -27,6 +25,7 @@ export interface PositionalSpec {
   readonly name: string;
   readonly summary: string;
   readonly choices?: readonly string[];
+  readonly optional?: boolean;
 }
 
 export interface CommandSpec {
@@ -131,6 +130,16 @@ const flagsets = {
         summary:
           "Select the output format (default human); human is indented JSON.",
         choices: allFormats,
+      },
+    ],
+  },
+  artifacts: {
+    flags: [
+      {
+        name: "--artifacts-file",
+        value: "path",
+        summary:
+          "Read the artifact types and rules from this file; overrides the .unverse/artifacts.json found upward from the current directory. The file is optional.",
       },
     ],
   },
@@ -550,15 +559,15 @@ export const resources: readonly ResourceSpec[] = [
   },
   {
     name: "artifact",
-    summary: "Inventory the built-in artifact types.",
+    summary: "Inventory artifacts and check them against declared rules.",
     commands: [
       {
         name: "types",
         stage: "other",
         effect: "read",
         summary:
-          "List the built-in artifact types with platform names, sources, and fields without contacting Dataverse.",
-        flagsets: ["output"],
+          "List the built-in artifact types, and the types declared in the artifacts file, without contacting Dataverse.",
+        flagsets: ["artifacts", "output"],
         outputs: tabular,
       },
       {
@@ -566,13 +575,13 @@ export const resources: readonly ResourceSpec[] = [
         stage: "observe",
         effect: "read",
         summary:
-          "List artifacts of one built-in type as normalized items with only the fields the source provides.",
-        flagsets: ["target", "output"],
+          "List artifacts of one built-in or declared type as normalized items with only the fields the source provides.",
+        flagsets: ["target", "artifacts", "output"],
         positionals: [
           {
             name: "type",
-            summary: "Select a built-in artifact type.",
-            choices: artifactTypeNames,
+            summary:
+              "Select a built-in type or a type declared in the artifacts file.",
           },
         ],
         flags: [
@@ -586,6 +595,27 @@ export const resources: readonly ResourceSpec[] = [
         outputs: tabular,
         exits: {
           7: "The item cap stopped the list before all items were returned.",
+        },
+      },
+      {
+        name: "check",
+        stage: "observe",
+        effect: "read",
+        summary:
+          "Check the artifacts of declared types against the rules in the artifacts file.",
+        flagsets: ["target", "artifacts", "output"],
+        positionals: [
+          {
+            name: "type",
+            summary:
+              "Check only this declared type; omit it to check every declared type.",
+            optional: true,
+          },
+        ],
+        outputs: tabular,
+        exits: {
+          1: "At least one rule was violated.",
+          7: "A rule could not be evaluated for an item because the field is unknown, and no rule was violated.",
         },
       },
     ],

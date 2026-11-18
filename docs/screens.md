@@ -271,7 +271,8 @@ that list to standard error and exits 2.
 
 `unverse artifact types` prints the built-in artifact catalog: each type's
 platform name, sources, provided fields, and the fields it cannot provide with
-a reason. It does not contact Dataverse.
+a reason, then the types declared in the artifacts file (none in this
+picture). It does not contact Dataverse.
 
 ![Artifact types](img/31-artifact-types.png)
 
@@ -290,3 +291,13 @@ the files but does not contact Dataverse. The fixture project holds the
 [example pipeline](examples/families.mjs).
 
 ![Pipeline list](img/33-pipelines.png)
+
+## 37. Artifact check
+
+`unverse artifact check --env <name>` evaluates the rules of the artifacts file
+against the environment. The picture uses `docs/examples/artifacts.json` and
+the synthetic fixture: every rule holds, so `violations` and `unknown` are
+empty and the exit is 0. A violated rule exits 1, and a field the platform
+did not return exits 7; see [checking artifacts](how-to-check-artifacts.md).
+
+![Artifact check](img/34-artifact-check.png)

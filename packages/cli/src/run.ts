@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import {
+  type ArtifactDeclarations,
   analyzeDependencies,
   artifactCatalog,
+  artifactTypeNames,
   type DependencyGraph,
   dependencyHtml,
   dependencyMermaid,
@@ -11,8 +13,10 @@ import {
   type ErrorCode,
   exitCodeFor,
   findArtifactType,
+  findUserType,
   outputVersion,
   type PostgresProfile,
+  parseArtifactDeclarations,
   parseConfig,
   parseManifest,
   parseModel,
@@ -27,6 +31,7 @@ import {
 import {
   applyPlan,
   apps,
+  checkDeclaredArtifacts,
   compareEnvironments,
   connectionReferences,
   connectors,
@@ -38,6 +43,7 @@ import {
   flows,
   inspectSchema,
   listArtifacts,
+  listDeclaredArtifacts,
   OrganizationMismatchError,
   type PlatformClient,
   planAccess,
@@ -74,6 +80,7 @@ import {
   configTemplate,
   type ProjectRuntime,
   projectRoot,
+  resolveArtifactsPath,
   resolveConfigPath,
   resolveEnvironmentName,
 } from "./project.js";
@@ -96,6 +103,24 @@ export interface CliRuntime extends ProjectRuntime {
     platformEnvironmentId: string,
   ) => PlatformClient;
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
+}
+
+async function loadDeclarations(
+  flags: ReadonlyMap<string, string>,
+  runtime: CliRuntime,
+  origins: string[],
+): Promise<ArtifactDeclarations> {
+  const file = await resolveArtifactsPath(flags, runtime);
+  if (file === undefined) {
+    origins.push(
+      "No artifacts file was found; no types or rules are declared.",
+    );
+    return parseArtifactDeclarations({ artifactsVersion: 1 });
+  }
+  origins.push(`Artifacts file ${file.value} ${file.origin}.`);
+  return parseArtifactDeclarations(
+    JSON.parse(await runtime.readFile(file.value)),
+  );
 }
 
 async function readPlan(runtime: CliRuntime, path: string) {
@@ -138,6 +163,26 @@ export async function runCli(
       );
       return 0;
     }
+    const declarations = command.startsWith("artifact ")
+      ? await loadDeclarations(flags, runtime, origins)
+      : undefined;
+    const requestedType = positionals.get("type") ?? "";
+    if (declarations !== undefined && requestedType !== "") {
+      const known = [
+        ...artifactTypeNames,
+        ...declarations.types.map((type) => type.type),
+      ];
+      if (
+        command === "artifact check"
+          ? findUserType(declarations, requestedType) === undefined
+          : !known.includes(requestedType)
+      )
+        throw new InputError(
+          command === "artifact check"
+            ? `Unknown declared type ${requestedType}; declared types: ${declarations.types.map((type) => type.type).join(", ") || "none"}.`
+            : `Unknown type ${requestedType}; choose one of ${known.join(", ")}.`,
+        );
+    }
     if (command === "artifact types")
       return emit(
         {
@@ -145,7 +190,12 @@ export async function runCli(
           command,
           timestamp: runtime.now(),
           status: "ok",
-          data: { types: artifactCatalog },
+          data: {
+            types: artifactCatalog,
+            userTypes: (declarations?.types ?? []).map(
+              ({ type, from, where }) => ({ type, from, where }),
+            ),
+          },
           evidence: [
             "The built-in artifact catalog was read from this program.",
           ],
@@ -520,32 +570,85 @@ export async function runCli(
       );
     }
     if (command === "artifact list") {
-      const spec = findArtifactType(positionals.get("type") ?? "");
-      if (spec === undefined)
-        throw new InputError("The artifact type is not in the catalog.");
+      const spec = findArtifactType(requestedType);
       const limit = flags.get("--limit");
-      const { items, complete } = await listArtifacts(
-        client,
-        spec,
-        limit === undefined ? undefined : Number(limit),
-      );
+      const cap = limit === undefined ? undefined : Number(limit);
+      const { items, complete, unknown } =
+        spec === undefined
+          ? await listDeclaredArtifacts(
+              client,
+              declarations as ArtifactDeclarations,
+              requestedType,
+              cap,
+            )
+          : { ...(await listArtifacts(client, spec, cap)), unknown: [] };
       return emit(
         {
           ...base,
           caller: { id: identity.applicationUserId, kind: "application-user" },
-          status: complete ? "ok" : "inconclusive",
-          data: { type: spec.type, items },
+          status: complete && unknown.length === 0 ? "ok" : "inconclusive",
+          data: {
+            type: requestedType,
+            items,
+            ...(spec === undefined ? { unknown } : {}),
+          },
           evidence: [
             "Selected environment identity and paginated inventory reads completed.",
           ],
           coverage: {
-            complete,
+            complete: complete && unknown.length === 0,
             limitations: [
               "Only items visible to this caller are listed, and only the fields the catalog declares for the type.",
               ...(complete
                 ? []
                 : [
                     "The item cap stopped the list before all items were returned.",
+                  ]),
+              ...(unknown.length === 0
+                ? []
+                : [
+                    "Items whose where field is unknown were left out; see unknown.",
+                  ]),
+            ],
+          },
+        },
+        format,
+        runtime,
+      );
+    }
+    if (command === "artifact check") {
+      const declared = declarations as ArtifactDeclarations;
+      const outcome = await checkDeclaredArtifacts(
+        client,
+        declared,
+        requestedType === "" ? undefined : requestedType,
+      );
+      const complete = outcome.unknown.length === 0;
+      return emit(
+        {
+          ...base,
+          caller: { id: identity.applicationUserId, kind: "application-user" },
+          status:
+            outcome.violations.length > 0
+              ? "failed"
+              : complete
+                ? "ok"
+                : "inconclusive",
+          data: outcome,
+          evidence: [
+            "Selected environment identity and paginated inventory reads completed.",
+          ],
+          coverage: {
+            complete,
+            limitations: [
+              "Only items visible to this caller are checked, and only the rules the artifacts file declares.",
+              ...(declared.rules.size === 0
+                ? ["No rules are declared, so nothing was checked."]
+                : []),
+              ...(complete
+                ? []
+                : [
+                    "A rule or where filter could not be evaluated for some items; see unknown.",
                   ]),
             ],
           },

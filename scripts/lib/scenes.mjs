@@ -253,6 +253,17 @@ export const scenes = [
     args: ["artifact", "list", "canvas-app", "--env", "dev"],
   },
   { name: "33-pipelines", args: ["pipeline", "list"] },
+  {
+    name: "34-artifact-check",
+    args: [
+      "artifact",
+      "check",
+      "--env",
+      "dev",
+      "--artifacts-file",
+      "artifacts.json",
+    ],
+  },
 ];
 
 export async function stageScenes(root, consumer) {
@@ -270,6 +281,10 @@ export async function stageScenes(root, consumer) {
   cpSync(
     resolve(root, "packages/core/test/fixtures/schema.json"),
     resolve(consumer.directory, "schema.json"),
+  );
+  cpSync(
+    resolve(root, "docs/examples/artifacts.json"),
+    resolve(consumer.directory, "artifacts.json"),
   );
   writeFileSync(
     resolve(consumer.directory, "mapping.json"),

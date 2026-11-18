@@ -227,7 +227,7 @@ function runtime(readConfig, output = [], errors = [], secrets = [], whoAmI) {
     writeFile: async () => {
       throw new Error("unexpected write");
     },
-    fileExists: async () => true,
+    fileExists: async (path) => !path.endsWith("artifacts.json"),
     listDirectory: async () => [],
     loadModule: async () => {
       throw new Error("unexpected module load");
@@ -1484,6 +1484,212 @@ test("a capped artifact list is inconclusive and exits seven", async () => {
   assert.equal(document.status, "inconclusive");
   assert.equal(document.coverage.complete, false);
   assert.equal(document.data.items.length, 1);
+});
+
+const discoveredArtifacts = "/work/project/.unverse/artifacts.json";
+
+const declaration = (types, rules = {}) =>
+  JSON.stringify({ artifactsVersion: 1, types, rules });
+
+async function artifactRun(args, files = {}, connect = true) {
+  const output = [];
+  const errors = [];
+  let connections = 0;
+  const code = await runCli([...args, "--format", "json"], {
+    ...runtime(() => validConfig, output, errors),
+    readFile: async (path) => {
+      if (path in files) return files[path];
+      if (path.endsWith("config.json")) return validConfig;
+      throw new Error(`ENOENT ${path}`);
+    },
+    fileExists: async (path) => path in files || path.endsWith("config.json"),
+    connect: () => {
+      connections += 1;
+      return artifactFixture().client;
+    },
+  });
+  assert.equal(connect || connections === 0, true);
+  return {
+    code,
+    connections,
+    document: output.length === 0 ? undefined : JSON.parse(output[0]),
+    errors: errors.join(""),
+  };
+}
+
+const apps = (rule, where) =>
+  declaration(
+    { apps: { from: "canvas-app", ...(where ? { where } : {}) } },
+    { apps: rule },
+  );
+
+test("artifact types also lists the declared types", async () => {
+  const { code, document, connections } = await artifactRun(
+    ["artifact", "types"],
+    {
+      [discoveredArtifacts]: declaration({
+        "code-app": { from: "canvas-app", where: { kind: "code-app" } },
+      }),
+    },
+    false,
+  );
+  assert.equal(code, 0);
+  assert.equal(connections, 0);
+  assert.deepEqual(document.data.userTypes, [
+    { type: "code-app", from: "canvas-app", where: { kind: "code-app" } },
+  ]);
+});
+
+test("a missing artifacts file is not an error", async () => {
+  const check = await artifactRun(["artifact", "check", "--env", "dev"]);
+  assert.equal(check.code, 0);
+  assert.deepEqual(check.document.data, {
+    violations: [],
+    checked: 0,
+    unknown: [],
+  });
+  assert.ok(
+    check.document.coverage.limitations.includes(
+      "No rules are declared, so nothing was checked.",
+    ),
+  );
+  const list = await artifactRun([
+    "artifact",
+    "list",
+    "security-role",
+    "--env",
+    "dev",
+  ]);
+  assert.equal(list.code, 0);
+  assert.equal(list.document.data.items.length, 2);
+  const types = await artifactRun(["artifact", "types"], {}, false);
+  assert.equal(types.code, 0);
+  assert.deepEqual(types.document.data.userTypes, []);
+});
+
+test("a declaration error exits two before any request", async () => {
+  for (const content of [
+    declaration({ x: { from: "nonsense" } }),
+    declaration({ x: { from: "table", where: { kind: "a" } } }),
+    declaration({ x: { from: "table" } }, { x: { name: "{a" } }),
+    declaration({ table: { from: "table" } }),
+    declaration({}, { ghost: { name: "{a}" } }),
+    "{",
+  ]) {
+    for (const command of ["check", "list x"]) {
+      const { code, connections, document } = await artifactRun(
+        ["artifact", ...command.split(" "), "--env", "dev"],
+        { [discoveredArtifacts]: content },
+        false,
+      );
+      assert.equal(code, 2, content);
+      assert.equal(connections, 0);
+      assert.equal(document.status, "error");
+    }
+  }
+});
+
+test("artifact list returns the filtered items of a declared type", async () => {
+  const { code, document } = await artifactRun(
+    ["artifact", "list", "apps", "--env", "dev"],
+    { [discoveredArtifacts]: apps({}, { kind: "code-app" }) },
+  );
+  assert.equal(code, 0);
+  assert.equal(document.data.type, "apps");
+  assert.deepEqual(
+    document.data.items.map((row) => row.name),
+    ["uv_code"],
+  );
+  assert.ok(
+    document.evidence.includes(
+      `Artifacts file ${discoveredArtifacts} found by searching up from /work/project.`,
+    ),
+  );
+});
+
+test("a satisfied check exits zero", async () => {
+  const { code, document } = await artifactRun(
+    ["artifact", "check", "--env", "dev"],
+    { [discoveredArtifacts]: apps({ name: "uv_{x}" }) },
+  );
+  assert.equal(code, 0);
+  assert.equal(document.status, "ok");
+  assert.equal(document.data.checked, 3);
+  assert.deepEqual(document.data.violations, []);
+});
+
+test("a violated rule exits one with the item and the evidence", async () => {
+  const { code, document } = await artifactRun(
+    ["artifact", "check", "apps", "--env", "dev"],
+    { [discoveredArtifacts]: apps({ name: "uv_c{x}" }) },
+  );
+  assert.equal(code, 1);
+  assert.equal(document.status, "failed");
+  assert.deepEqual(document.data.violations, [
+    {
+      type: "apps",
+      rule: "name",
+      item: { id: "00000000-0000-0000-0000-000000000003", name: "uv_bare" },
+      expected: "uv_c{x}",
+      observed: "uv_bare",
+    },
+  ]);
+});
+
+test("an unknown field makes the check inconclusive and exits seven", async () => {
+  const { code, document } = await artifactRun(
+    ["artifact", "check", "--env", "dev"],
+    {
+      [discoveredArtifacts]: apps(
+        { managed: false },
+        { kind: ["classic", "unknown"] },
+      ),
+    },
+  );
+  assert.equal(code, 7);
+  assert.equal(document.status, "inconclusive");
+  assert.equal(document.coverage.complete, false);
+  assert.deepEqual(document.data.violations, []);
+  assert.equal(document.data.checked, 2);
+  assert.deepEqual(
+    document.data.unknown.map((entry) => [entry.item.name, entry.field]),
+    [["uv_bare", "managed"]],
+  );
+});
+
+test("a check of an undeclared type exits two before connecting", async () => {
+  const { code, connections, document } = await artifactRun(
+    ["artifact", "check", "canvas-app", "--env", "dev"],
+    { [discoveredArtifacts]: apps({ name: "uv_{x}" }) },
+    false,
+  );
+  assert.equal(code, 2);
+  assert.equal(connections, 0);
+  assert.match(document.error.message, /Unknown declared type canvas-app/);
+});
+
+test("--artifacts-file overrides the discovered artifacts file", async () => {
+  const { code, document } = await artifactRun(
+    [
+      "artifact",
+      "check",
+      "--env",
+      "dev",
+      "--artifacts-file",
+      "/other/artifacts.json",
+    ],
+    {
+      [discoveredArtifacts]: apps({ name: "uv_{x}" }),
+      "/other/artifacts.json": apps({ name: "nothing" }),
+    },
+  );
+  assert.equal(code, 1);
+  assert.equal(document.data.violations.length, 3);
+  assert.ok(
+    document.evidence.includes(
+      "Artifacts file /other/artifacts.json from --artifacts-file.",
+    ),
+  );
 });
 
 const platformId = "11111111-2222-3333-4444-555555555555";

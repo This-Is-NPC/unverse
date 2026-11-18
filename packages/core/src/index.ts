@@ -5,6 +5,23 @@ export {
   type TeamSelector,
 } from "./access.js";
 export {
+  type ArtifactCheck,
+  ArtifactDeclarationError,
+  type ArtifactDeclarations,
+  type ArtifactRule,
+  type ArtifactUnknown,
+  type ArtifactViolation,
+  checkArtifacts,
+  findUserType,
+  isSystemSolution,
+  type MemberItem,
+  type MemberSolution,
+  needsMembership,
+  parseArtifactDeclarations,
+  selectArtifacts,
+  type UserArtifactType,
+} from "./artifact-rules.js";
+export {
   type ArtifactAbsence,
   type ArtifactField,
   type ArtifactItem,

@@ -241,40 +241,67 @@ Find cloud flows without exporting definitions or connection secrets.
 
 ## artifact types
 
-List the built-in artifact types with platform names, sources, and fields without contacting Dataverse.
+List the built-in artifact types, and the types declared in the artifacts file, without contacting Dataverse.
 
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse artifact types [--format <human|json|csv>]`
+`unverse artifact types [--artifacts-file <path>] [--format <human|json|csv>]`
 
 ### Flags
 
+- `--artifacts-file <path>`: Read the artifact types and rules from this file; overrides the .unverse/artifacts.json found upward from the current directory. The file is optional.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 
 ## artifact list
 
-List artifacts of one built-in type as normalized items with only the fields the source provides.
+List artifacts of one built-in or declared type as normalized items with only the fields the source provides.
 
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse artifact list <type> [--config <path>] [--env <name>] [--format <human|json|csv>] [--limit <items>]`
+`unverse artifact list <type> [--config <path>] [--env <name>] [--artifacts-file <path>] [--format <human|json|csv>] [--limit <items>]`
 
 ### Arguments
 
-- `<type>`: Select a built-in artifact type. One of: table, canvas-app, model-driven-app, cloud-flow, security-role, connection-reference, environment-variable, solution, connector.
+- `<type>`: Select a built-in type or a type declared in the artifacts file.
 
 ### Flags
 
 - `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
 - `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
+- `--artifacts-file <path>`: Read the artifact types and rules from this file; overrides the .unverse/artifacts.json found upward from the current directory. The file is optional.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--limit <items>`: Cap items and report incomplete coverage when more exist.
 
 ### Exit codes
 
 - `7`: The item cap stopped the list before all items were returned.
+
+## artifact check
+
+Check the artifacts of declared types against the rules in the artifacts file.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse artifact check [type] [--config <path>] [--env <name>] [--artifacts-file <path>] [--format <human|json|csv>]`
+
+### Arguments
+
+- `[type]`: Check only this declared type; omit it to check every declared type.
+
+### Flags
+
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
+- `--artifacts-file <path>`: Read the artifact types and rules from this file; overrides the .unverse/artifacts.json found upward from the current directory. The file is optional.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+
+### Exit codes
+
+- `1`: At least one rule was violated.
+- `7`: A rule could not be evaluated for an item because the field is unknown, and no rule was violated.
 
 ## user list
 

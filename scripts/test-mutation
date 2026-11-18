@@ -151,7 +151,7 @@ mutations.push(
 
 mutations.push(
   ["artifact-invent-field", "dataverse/artifacts.js", "managed: row.managed,", "managed: row.managed ?? false,", "dataverse", "a field the source does not provide stays absent", "artifacts"],
-  ["artifact-type-validation", "cli/arguments.js", "positional.choices !== undefined && !positional.choices.includes(word)", "false", "cli", "an artifact type outside the catalog exits two before connecting"],
+  ["artifact-type-validation", "cli/run.js", ": !known.includes(requestedType)", ": false", "cli", "an artifact type outside the catalog exits two before connecting"],
   ["artifact-incomplete", "dataverse/artifacts.js", ": { items: items.slice(0, limit), complete: false }", ": { items: items.slice(0, limit), complete: true }", "cli", "a capped artifact list is inconclusive and exits seven"],
 );
 
@@ -201,6 +201,13 @@ mutations.push(
   ["prune-gone-wait", "dataverse/schema.js", "async () => ((await stillListed()) ? undefined : true)", "async () => true", "dataverse", "prune waits for deleted metadata to disappear", "schema"],
   ["prune-gone-deadline", "dataverse/schema.js", "if (gone === undefined)", "if (false)", "dataverse", "prune waits for deleted metadata to disappear", "schema"],
   ["prune-effect", "core/plan.js", 'effect: prune ? "destructive" : "write",', 'effect: "write",', "cli", "a prune plan is destructive and applies only with --destructive"],
+);
+
+mutations.push(
+  ["artifact-placeholder-greedy", "core/artifact-rules.js", 'any: ".+?",', 'any: ".*",', "core", "placeholders match the declared character kinds", "artifact-rules"],
+  ["artifact-unknown-passes", "core/artifact-rules.js", "return missing(key);\n        const accepted", "return ok;\n        const accepted", "cli", "an unknown field makes the check inconclusive and exits seven"],
+  ["artifact-membership-per-item", "dataverse/declared.js", "solutions: known.get(", "solutions: (await membershipIndex(client, types.map(componentTypeOf))).get(", "dataverse", "one membership read serves every item and every type", "declared"],
+  ["artifact-missing-file", "cli/project.js", "const found = await searchUp(runtime, artifactsFile);", 'const found = await searchUp(runtime, artifactsFile);\n    if (found === undefined) throw new InputError("missing");', "cli", "a missing artifacts file is not an error"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

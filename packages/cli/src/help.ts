@@ -34,6 +34,12 @@ function positionalSummary(positional: PositionalSpec): string {
     : `${positional.summary} One of: ${positional.choices.join(", ")}.`;
 }
 
+function positionalText(positional: PositionalSpec): string {
+  return positional.optional === true
+    ? `[${positional.name}]`
+    : `<${positional.name}>`;
+}
+
 export function usage(route: Route): string {
   const flags = commandFlags(route.command);
   const groups = commandGroups(route.command);
@@ -41,7 +47,7 @@ export function usage(route: Route): string {
   return [
     "unverse",
     route.path,
-    ...(route.command.positionals ?? []).map(({ name }) => `<${name}>`),
+    ...(route.command.positionals ?? []).map(positionalText),
     ...flags
       .filter((flag) => !grouped.has(flag.name))
       .map((flag) =>
@@ -142,7 +148,7 @@ export function renderCommandHelp(route: Route): string {
           "Arguments:",
           ...columns(
             (route.command.positionals ?? []).map((positional) => [
-              `  <${positional.name}>`,
+              `  ${positionalText(positional)}`,
               positionalSummary(positional),
             ]),
           ),
@@ -196,7 +202,7 @@ function renderCommandReference(route: Route): string {
           ...bullets(
             (command.positionals ?? []).map(
               (positional) =>
-                `- \`<${positional.name}>\`: ${positionalSummary(positional)}`,
+                `- \`${positionalText(positional)}\`: ${positionalSummary(positional)}`,
             ),
           ),
         ]),

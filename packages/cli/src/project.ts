@@ -2,6 +2,7 @@ import { basename, dirname, join } from "node:path";
 import { InputError } from "./arguments.js";
 
 export const configFile = join(".unverse", "config.json");
+export const artifactsFile = join(".unverse", "artifacts.json");
 
 export interface ProjectRuntime {
   readonly cwd: string;
@@ -19,6 +20,20 @@ function variable(runtime: ProjectRuntime, name: string): string | undefined {
   return value === undefined || value === "" ? undefined : value;
 }
 
+async function searchUp(
+  runtime: ProjectRuntime,
+  file: string,
+): Promise<string | undefined> {
+  let directory = runtime.cwd;
+  for (;;) {
+    const candidate = join(directory, file);
+    if (await runtime.fileExists(candidate)) return candidate;
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+
 export async function resolveConfigPath(
   flags: ReadonlyMap<string, string>,
   runtime: ProjectRuntime,
@@ -28,21 +43,31 @@ export async function resolveConfigPath(
   const named = variable(runtime, "UNVERSE_CONFIG");
   if (named !== undefined)
     return { value: named, origin: "from UNVERSE_CONFIG" };
-  let directory = runtime.cwd;
-  for (;;) {
-    const candidate = join(directory, configFile);
-    if (await runtime.fileExists(candidate))
-      return {
-        value: candidate,
-        origin: `found by searching up from ${runtime.cwd}`,
-      };
-    const parent = dirname(directory);
-    if (parent === directory) break;
-    directory = parent;
-  }
+  const found = await searchUp(runtime, configFile);
+  if (found !== undefined)
+    return {
+      value: found,
+      origin: `found by searching up from ${runtime.cwd}`,
+    };
   throw new InputError(
     `No ${configFile} found from ${runtime.cwd} up to the filesystem root. Run unverse init to create one here, or pass --config or set UNVERSE_CONFIG.`,
   );
+}
+
+export async function resolveArtifactsPath(
+  flags: ReadonlyMap<string, string>,
+  runtime: ProjectRuntime,
+): Promise<Resolved | undefined> {
+  const flag = flags.get("--artifacts-file");
+  if (flag !== undefined)
+    return { value: flag, origin: "from --artifacts-file" };
+  const found = await searchUp(runtime, artifactsFile);
+  return found === undefined
+    ? undefined
+    : {
+        value: found,
+        origin: `found by searching up from ${runtime.cwd}`,
+      };
 }
 
 export function resolveEnvironmentName(

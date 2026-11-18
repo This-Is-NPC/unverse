@@ -7,6 +7,7 @@ export const rows = {
   EntityDefinitions: [
     {
       LogicalName: "account",
+      MetadataId: "meta-account",
       EntitySetName: "accounts",
       PrimaryIdAttribute: "accountid",
       DisplayName: { UserLocalizedLabel: { Label: "Account" } },
@@ -14,6 +15,7 @@ export const rows = {
     },
     {
       LogicalName: "uv_unlabelled",
+      MetadataId: "meta-unlabelled",
       EntitySetName: "uv_unlabelleds",
       PrimaryIdAttribute: "uv_unlabelledid",
       DisplayName: { UserLocalizedLabel: null },
@@ -96,7 +98,50 @@ export const rows = {
       friendlyname: "Solution",
       version: "1.0",
       ismanaged: false,
+      publisherid: { customizationprefix: "uv" },
     },
+    {
+      solutionid: id(20),
+      uniquename: "uv_other",
+      friendlyname: "Other",
+      version: "1.0",
+      ismanaged: false,
+      publisherid: { customizationprefix: "ot" },
+    },
+    {
+      solutionid: id(21),
+      uniquename: "Default",
+      friendlyname: "Default Solution",
+      version: "1.0",
+      ismanaged: false,
+      publisherid: { customizationprefix: "uv" },
+    },
+    {
+      solutionid: id(22),
+      uniquename: "uv_managed",
+      friendlyname: "Managed",
+      version: "1.0",
+      ismanaged: true,
+      publisherid: { customizationprefix: "mg" },
+    },
+  ],
+  solutioncomponents: [
+    { componenttype: 300, objectid: id(1), _solutionid_value: id(12) },
+    { componenttype: 300, objectid: id(1), _solutionid_value: id(21) },
+    { componenttype: 300, objectid: id(2), _solutionid_value: id(22) },
+    { componenttype: 300, objectid: id(3), _solutionid_value: id(21) },
+    { componenttype: 1, objectid: "meta-account", _solutionid_value: id(12) },
+    {
+      componenttype: 1,
+      objectid: "meta-unlabelled",
+      _solutionid_value: id(12),
+    },
+    {
+      componenttype: 1,
+      objectid: "meta-unlabelled",
+      _solutionid_value: id(20),
+    },
+    { componenttype: 20, objectid: id(7), _solutionid_value: id(20) },
   ],
   connectors: [
     {

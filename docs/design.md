@@ -153,7 +153,7 @@ Every command is `unverse <group> <command>` or the root command
 | `table`, `record` | `table list` finds table metadata; `record query <table>` runs a paginated OData read |
 | `schema` | `inspect` and `plan` for additive metadata |
 | `solution`, `app`, `flow`, `variable`, `connector`, `connref` | Read-only inventories; `solution show <solution-id>` and `connref show <reference-id>` inspect one item |
-| `artifact` | `types` prints the built-in artifact catalog offline; `list <type>` reads one type as normalized items (§19) |
+| `artifact` | `types` prints the built-in artifact catalog and the declared types offline; `list <type>` reads one built-in or declared type as normalized items; `check [type]` evaluates the declared rules (§19) |
 | `user`, `role` | `user list`, `user show` (direct and team roles), and `role check` |
 | `deps` | `list`, `graph`, and `impact` dependency evidence |
 | `pipeline` | `list` and `show` read pipelines offline; `plan <pipeline> -- <flags>` runs one and prints a data plan (§22) |
@@ -889,10 +889,9 @@ them `classic`, `component-library`, `custom-page`, `unified`, `code-app`, and
 `mobile`. A missing or unrecognized value is `unknown`. This mapping comes
 from the documentation; it was not observed against a live environment.
 
-**Not provided, and why.** `solution` and `publisher` are absent for every
-type: solution membership needs one `solutioncomponents` read per solution and
-the publisher a join through the solution, which the inventory does not make
-to avoid a request per item. `owner` and `managed` are absent where the
+**Not provided, and why.** `solution` and `publisher` are absent from every
+inventory item: the inventory does not read solution membership. A declared
+type that needs it reads it once (see below). `owner` and `managed` are absent where the
 reader does not select the column or the platform has no such notion (tables
 and solutions have no owner; roles belong to a business unit). The
 `publisher` column on `canvasapps` is free text, not a Dataverse publisher,
@@ -902,6 +901,91 @@ and is not used.
 is `inconclusive`, coverage is incomplete, and the exit is 7 (§8). An error on
 any page fails the command; it never yields a partial list marked complete.
 Environment variable values are never read.
+
+**Declared types and rules.** One optional file, `.unverse/artifacts.json`,
+names the artifact types a team cares about and the rules each must follow.
+It is found upward from the current directory like the configuration;
+`--artifacts-file <path>` overrides the search. Only `artifact` commands read
+it. No file is not an error: `artifact types` lists the built-in catalog,
+`artifact list` works on built-in types, and `artifact check` succeeds with
+zero rules and the limitation "No rules are declared, so nothing was
+checked." An explicit `--artifacts-file` that cannot be read exits 2.
+
+```json
+{ "artifactsVersion": 1,
+  "types": { "<user type>": { "from": "<built-in type>", "where": { "<field>": "<value>" } } },
+  "rules": { "<user type>": { "<rule>": "<value>" } } }
+```
+
+- `artifactsVersion` must be `1`. Unknown keys anywhere fail the load.
+- A user type name is lowercase letters, digits and hyphens, starting with a
+  letter, and must not equal a built-in type name. `from` must be a built-in
+  type. `where` is optional.
+- `where` keys are the fields the built-in type provides, plus `name`, `id`,
+  and, for types with a solution component type, `solution` and `publisher`.
+  A value is a string, a list of strings (any of), or, for `managed` only, a
+  boolean. Strings match the whole value, case-sensitively, with `*` standing
+  for any run of characters (`id` is case-insensitive). All keys must match.
+  An item that lacks a `where` field cannot be placed: it is left out of
+  `artifact list` and reported under `unknown` by `artifact check`.
+- Rules are keyed by user type only; a rule for an undeclared type, or for a
+  built-in type name, fails the load. Rule keys, evaluated in this order:
+
+| Rule | Value | Passes when |
+| --- | --- | --- |
+| `name` | pattern | the item name matches the pattern |
+| `displayName` | pattern | the display name matches the pattern |
+| `solution` | `"required"` | the item is in at least one unmanaged solution other than the system solutions |
+| `solution` | `"forbidden"` | the item is in no such solution |
+| `solution` | list of unique names | the item is in at least one of the named solutions, managed or not |
+| `publisher` | list of prefixes | the item is in at least one such unmanaged solution and every one of those solutions has a publisher prefix in the list |
+| `owner` | list of IDs | the owner is one of the IDs (case-insensitive) |
+| `managed` | boolean | the managed state equals the value |
+
+  A rule key the built-in type does not provide fails the load (for example
+  `owner` on `security-role`, or `solution` on `connector`).
+- **Patterns.** Literal text matches exactly and case-sensitively, and the
+  whole value must match. Placeholders are `{label}` (one or more characters),
+  `{label:lower}` (one or more characters, none an uppercase letter),
+  `{label:upper}` (none a lowercase letter), `{label:digits}` (one or more
+  digits 0 to 9) and `{label:digits:N}` (exactly N digits, N from 1 to 99). A
+  label starts with a letter and continues with letters, digits, `_` or `-`.
+  A label used twice in one pattern must use the same kind and then matches
+  the same text. There is no escape: a stray `{` or `}`, an unknown kind or a
+  width on a kind other than `digits` is a malformed placeholder and fails the
+  load. A placeholder can match text that contains the pattern's other
+  literals, so a pattern is a shape check, not a parser.
+
+**Membership read.** When a selected user type uses `solution` or `publisher`
+in `where` or in its rule, Unverse reads membership once for all the types of
+the run: one paged `solutions` read with the publisher prefix expanded, and
+one paged `solutioncomponents` read filtered to the component types needed
+(`or`-joined), never a request per item. Component types come from the
+catalog: table 1, security role 20, cloud flow 29, model-driven app 80,
+canvas app 300, environment variable 380. Table components are keyed by
+`MetadataId`, so tables add one `EntityDefinitions` read for the identifiers.
+`connection-reference`, `connector` and `solution` have no mapped component
+type and cannot use `solution` or `publisher`. The component type numbers are
+from the Microsoft Learn component type list and were not observed against a
+live environment. The solutions `Default`, `Active` and `Basic` are ignored.
+Each item gets `solutions`, a list of `{ uniqueName, managed, publisher }`;
+`solution` and `publisher` in `where` and in rules look only at unmanaged
+solutions, except the list form of the `solution` rule. The inventory items
+of a declared type keep `type` of the built-in type.
+
+**Check.** `artifact check [type]` is an OBSERVE command with effect `read`.
+It evaluates the rules of every declared type that has rules, or of one type,
+and reports `{ violations, checked, unknown }`. A violation is `{ type, rule,
+item: { id, name }, expected, observed }`; `checked` counts items selected by
+a type that has rules. An item that lacks a field a rule needs (for example a
+flow without `ismanaged`), or that a `where` filter cannot place, is listed in
+`unknown` with the field and reason, never passed. Exit 0: no violation and
+nothing unknown. Exit 1: at least one violation, even when something is also
+unknown. Exit 7: no violation, but something unknown (coverage incomplete).
+A declaration error exits 2 before any request, and an unknown type argument
+exits 2 before connecting.
+
+
 ## 20. Power Platform API source
 
 `app list` and `flow list` read Dataverse tables by default. With

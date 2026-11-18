@@ -62,6 +62,11 @@ capabilities, and incomplete coverage have distinct exits. See
 [results](docs/design.md#8-results-and-exits) and the
 [command model](docs/design.md#18-command-model).
 
+**Standards.** Name the artifact types your team cares about and the rules
+each must follow in one optional `.unverse/artifacts.json`; `artifact check`
+reports violations with a distinct exit. See
+[checking artifacts](docs/how-to-check-artifacts.md).
+
 **Verified subset.** [Transfer manifests](docs/how-to-export-data.md) retain
 modeled IDs, relationships, decimals, and temporal semantics. PostgreSQL
 imports use an owned schema and transactional checkpoint, not a merge into
@@ -109,7 +114,8 @@ can allowlist the `read` commands.
 | `pg verify` | Compare a committed target with its manifest |
 | `solution list` / `solution show <solution-id>` | Find solutions and inspect membership |
 | `app list` / `flow list` | Find visible apps and cloud flows |
-| `artifact types` / `artifact list <type>` | Show the built-in artifact catalog offline; list one type as normalized items |
+| `artifact types` / `artifact list <type>` | Show the built-in and declared artifact types offline; list one type as normalized items |
+| `artifact check [type]` | Check declared artifact types against their naming, solution, publisher, owner and managed rules |
 | `user list` | Find exact user identifiers for role investigation |
 | `variable list` | Inspect masked settings |
 | `access plan` | Review adding existing security roles to teams |

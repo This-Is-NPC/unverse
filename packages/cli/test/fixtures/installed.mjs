@@ -59,6 +59,7 @@ const routes = {
         friendlyname: "Community Fixture",
         version: "1.0.0.0",
         ismanaged: false,
+        publisherid: { customizationprefix: "fx" },
       },
     ],
   },
@@ -139,6 +140,7 @@ const routes = {
     value: [
       {
         LogicalName: "account",
+        MetadataId: "metadata-account",
         EntitySetName: "accounts",
         PrimaryIdAttribute: "accountid",
         DisplayName: { UserLocalizedLabel: { Label: "Account" } },
@@ -263,6 +265,17 @@ globalThis.fetch = async (input, options) => {
     filter === null
       ? undefined
       : /^LogicalName eq '([^']+)'$/.exec(filter)?.[1];
+  const membership = {
+    value: [
+      ["300", id("14")],
+      ["1", "metadata-parent"],
+      ["1", "metadata-child"],
+    ].map(([componenttype, objectid]) => ({
+      componenttype: Number(componenttype),
+      objectid,
+      _solutionid_value: id("11"),
+    })),
+  };
   const body =
     route === "EntityDefinitions" && name !== undefined
       ? {
@@ -270,7 +283,9 @@ globalThis.fetch = async (input, options) => {
             (row) => row.LogicalName === name,
           ),
         }
-      : routes[route];
+      : route === "solutioncomponents" && filter?.startsWith("componenttype eq")
+        ? membership
+        : routes[route];
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "Content-Type": "application/json" },
