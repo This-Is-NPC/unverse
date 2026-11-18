@@ -2,8 +2,10 @@ import {
   type Column,
   canonical,
   type DataverseMapping,
+  type Entity,
   fingerprint,
   lookupLimitations,
+  type OnExisting,
   type PlanEffect,
   parseManifest,
   parseMapping,
@@ -32,7 +34,14 @@ export interface DataPlan {
   readonly manifest: TransferManifest;
   readonly policyFingerprint: string;
   readonly observedFingerprint: string;
+  readonly onExisting: OnExisting;
   readonly create: readonly { readonly entity: string; readonly id: string }[];
+  readonly update: readonly {
+    readonly entity: string;
+    readonly id: string;
+    readonly fields: Readonly<Record<string, unknown>>;
+  }[];
+  readonly unchanged: Readonly<Record<string, number>>;
   readonly blocked: readonly {
     readonly entity: string;
     readonly id: string;
@@ -47,9 +56,42 @@ export async function planDesired(
   input: unknown,
   environment: SchemaEnvironment,
 ): Promise<DataPlan> {
-  const { manifest, mapping, purpose, basis } = await resolveDesired(input);
+  const { manifest, mapping, purpose, basis, onExisting } =
+    await resolveDesired(input);
   if (purpose === "transfer") assertTransferSource(manifest, environment);
-  return planData(client, manifest, mapping, environment, purpose, basis);
+  return planData(
+    client,
+    manifest,
+    mapping,
+    environment,
+    purpose,
+    basis,
+    onExisting,
+  );
+}
+
+type Change = DataPlan["update"][number];
+type BatchOperation = Parameters<DataverseClient["atomicBatch"]>[0][number];
+
+/** The modeled fields of the desired row that differ from the target row. */
+function differences(
+  entity: Entity,
+  desired: Readonly<Record<string, unknown>>,
+  existing: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    entity.columns
+      .filter(
+        (column) =>
+          column.name !== entity.primaryKey &&
+          canonical(desired[column.name]) !== canonical(existing[column.name]),
+      )
+      .map((column) => [column.name, desired[column.name]]),
+  );
+}
+
+function physicalValue(column: Column, value: unknown): unknown {
+  return value !== null && column.type === "decimal" ? Number(value) : value;
 }
 
 async function planData(
@@ -59,6 +101,7 @@ async function planData(
   environment: SchemaEnvironment,
   purpose: "seed" | "transfer",
   policyFingerprint: string,
+  onExisting: OnExisting,
 ): Promise<DataPlan> {
   const target = await exportTransfer(
     client,
@@ -67,6 +110,8 @@ async function planData(
     environment,
   );
   const create: { entity: string; id: string }[] = [];
+  const update: Change[] = [];
+  const unchanged: Record<string, number> = {};
   const blocked: { entity: string; id: string; reason: string }[] = [];
   let operations = 0;
   for (const entity of manifest.model.entities) {
@@ -76,9 +121,12 @@ async function planData(
         row,
       ]),
     );
+    unchanged[entity.name] = 0;
     for (const row of manifest.data[entity.name] ?? []) {
       const id = guid(String(row[entity.primaryKey]));
       const existing = current.get(id);
+      const fields =
+        existing === undefined ? {} : differences(entity, row, existing);
       if (existing === undefined) {
         create.push({ entity: entity.name, id });
         operations +=
@@ -89,12 +137,27 @@ async function planData(
                 column.externalReference !== undefined) &&
               row[column.name] !== null,
           ).length;
-      } else if (canonical(existing) !== canonical(row))
+      } else if (Object.keys(fields).length === 0)
+        unchanged[entity.name] = (unchanged[entity.name] ?? 0) + 1;
+      else if (onExisting === "update") {
+        update.push({ entity: entity.name, id, fields });
+        operations +=
+          (entity.columns.some(
+            (column) =>
+              column.references === undefined && Object.hasOwn(fields, column.name),
+          )
+            ? 1
+            : 0) +
+          entity.columns.filter(
+            (column) =>
+              column.references !== undefined && Object.hasOwn(fields, column.name),
+          ).length;
+      } else
         blocked.push({
           entity: entity.name,
           id,
           reason:
-            "An existing row differs; overwrites and repairs are not authorized.",
+            "An existing row differs; set onExisting to update to change it.",
         });
     }
   }
@@ -113,11 +176,16 @@ async function planData(
     manifest,
     policyFingerprint,
     observedFingerprint: target.fingerprint,
+    onExisting,
     create,
+    update,
+    unchanged,
     blocked,
     limitations: [
       ...lookupLimitations(manifest.model),
-      "Create-only atomic changeset; existing differing rows, deletes, and overwrites are blocked.",
+      onExisting === "update"
+        ? "Atomic changeset of creates and updates; an update sends only the differing modeled fields, never creates, and deletes nothing."
+        : "Create-only atomic changeset; existing differing rows and overwrites are blocked.",
       "The dataset is bounded to 1000 operations and 4 MB. Resume means re-plan and verify, not per-row checkpoints.",
       "A lost response has an unknown outcome until inspection. No write is retried automatically.",
       "A field copy policy is an explicit authorization, not automatic detection of personal or sensitive data.",
@@ -136,6 +204,7 @@ async function readDataPlan(
     value.dataPlanVersion !== 1 ||
     value.kind !== "data" ||
     !["seed", "transfer"].includes(String(value.purpose)) ||
+    !["block", "update"].includes(String(value.onExisting)) ||
     canonical(value.environment) !== canonical(environment)
   )
     throw new DataverseError(
@@ -156,6 +225,7 @@ async function readDataPlan(
     environment,
     value.purpose as "seed" | "transfer",
     String(value.policyFingerprint),
+    value.onExisting as OnExisting,
   );
   return { manifest, mapping, expected };
 }
@@ -168,8 +238,12 @@ export async function verifyDataPlan(
   const { expected } = await readDataPlan(client, input, environment);
   return {
     kind: "data" as const,
-    satisfied: expected.create.length === 0 && expected.blocked.length === 0,
+    satisfied:
+      expected.create.length === 0 &&
+      expected.update.length === 0 &&
+      expected.blocked.length === 0,
     create: expected.create,
+    update: expected.update,
     blocked: expected.blocked,
   };
 }
@@ -195,7 +269,7 @@ export async function applyDataPlan(
       "invalid-input",
       "Data plan contains conflicting existing rows; no writes were issued.",
     );
-  if (expected.create.length === 0)
+  if (expected.create.length === 0 && expected.update.length === 0)
     return verifyData(
       client,
       manifest,
@@ -236,12 +310,12 @@ export async function applyDataPlan(
       );
     return identifier(set);
   };
-  const operations: {
-    path: string;
-    createOnly: boolean;
-    body: Record<string, unknown>;
-  }[] = [];
-  const links: typeof operations = [];
+  const creates: BatchOperation[] = [];
+  const updates: BatchOperation[] = [];
+  const links: BatchOperation[] = [];
+  const changes = new Map(
+    expected.update.map((change) => [`${change.entity}/${change.id}`, change]),
+  );
   for (const entity of manifest.model.entities) {
     const navigations = new Map<string, string>();
     for (const column of entity.columns)
@@ -276,36 +350,44 @@ export async function applyDataPlan(
           ),
         );
       }
+    const link = (path: string, column: Column, value: unknown) =>
+      links.push({
+        path,
+        kind: "update",
+        body: {
+          [`${navigations.get(column.name)}@odata.bind`]:
+            value === null
+              ? null
+              : `/${referenceSet(column)}(${guid(String(value))})`,
+        },
+      });
     for (const row of manifest.data[entity.name] ?? []) {
       const id = String(row[entity.primaryKey]);
-      if (
-        !expected.create.some(
-          (candidate) =>
-            candidate.entity === entity.name && candidate.id === id,
-        )
-      )
-        continue;
       const path = `${sets.get(entity.name)}(${guid(id)})`;
+      const created = expected.create.some(
+        (candidate) => candidate.entity === entity.name && candidate.id === id,
+      );
+      const change = changes.get(`${entity.name}/${id}`);
+      if (!created && change === undefined) continue;
       const values: Record<string, unknown> = {};
       for (const column of entity.columns) {
-        const value = row[column.name];
         if (column.name === entity.primaryKey) continue;
-        if (column.references === undefined && !column.externalReference)
-          values[physicalColumn(mapping, entity, column)] =
-            value !== null && column.type === "decimal" ? Number(value) : value;
-        else if (value !== null)
-          links.push({
-            path,
-            createOnly: false,
-            body: {
-              [`${navigations.get(column.name)}@odata.bind`]: `/${referenceSet(column)}(${guid(String(value))})`,
-            },
-          });
+        const value = row[column.name];
+        if (column.references !== undefined || column.externalReference !== undefined) {
+          if (created ? value !== null : Object.hasOwn(change?.fields ?? {}, column.name))
+            link(path, column, value);
+        } else if (created || Object.hasOwn(change?.fields ?? {}, column.name))
+          values[physicalColumn(mapping, entity, column)] = physicalValue(
+            column,
+            value,
+          );
       }
-      operations.push({ path, createOnly: true, body: values });
+      if (created) creates.push({ path, kind: "create", body: values });
+      else if (Object.keys(values).length > 0)
+        updates.push({ path, kind: "update", body: values });
     }
   }
-  await client.atomicBatch([...operations, ...links]);
+  await client.atomicBatch([...creates, ...updates, ...links]);
   return verifyData(client, manifest, mapping, environment, "committed");
 }
 

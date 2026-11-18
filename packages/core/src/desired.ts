@@ -27,16 +27,28 @@ export interface DesiredData {
   };
   /** Identifies what determined the rows; defaults to the dataset fingerprint. */
   readonly basis?: string;
+  /** What to do with a target row that differs; defaults to blocking. */
+  readonly onExisting?: OnExisting;
 }
+
+export type OnExisting = "block" | "update";
 
 export interface ResolvedData {
   readonly manifest: TransferManifest;
   readonly mapping: DataverseMapping;
   readonly purpose: "seed" | "transfer";
   readonly basis: string;
+  readonly onExisting: OnExisting;
 }
 
-const desiredKeys = ["model", "mapping", "data", "source", "basis"];
+const desiredKeys = [
+  "model",
+  "mapping",
+  "data",
+  "source",
+  "basis",
+  "onExisting",
+];
 
 export async function resolveDesired(input: unknown): Promise<ResolvedData> {
   const desired = record(input);
@@ -47,7 +59,16 @@ export async function resolveDesired(input: unknown): Promise<ResolvedData> {
   )
     throw new SchemaError(
       "invalid-input",
-      "Desired data has a model, mapping, data, and optional source and basis.",
+      "Desired data has a model, mapping, data, and optional source, basis, and onExisting.",
+    );
+  if (
+    desired.onExisting !== undefined &&
+    desired.onExisting !== "block" &&
+    desired.onExisting !== "update"
+  )
+    throw new SchemaError(
+      "invalid-input",
+      "onExisting must be block or update.",
     );
   const model = parseModel(desired.model);
   const mapping = parseMapping(desired.mapping);
@@ -76,6 +97,7 @@ export async function resolveDesired(input: unknown): Promise<ResolvedData> {
     mapping,
     purpose: desired.source === undefined ? "seed" : "transfer",
     basis,
+    onExisting: desired.onExisting ?? "block",
   };
 }
 

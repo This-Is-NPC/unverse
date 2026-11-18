@@ -221,6 +221,16 @@ mutations.push(
   ["tenant-scope-observed", "core/plan.js", "primaryKey: externalReference.primaryKey,\n                        },", "primaryKey: externalReference.primaryKey,\n                            scope: externalReference.scope,\n                        },", "dataverse", "Dataverse transfer plans report tenant references as unverified and copies them", "tenant"],
 );
 
+mutations.push(
+  ["update-all-fields", "dataverse/data-plan.js", "else if (created || Object.hasOwn(change?.fields ?? {}, column.name))", "else if (true)", "dataverse", "an update carries only the differing modeled fields and never creates", "data-plan"],
+  ["update-if-match", "dataverse/client.js", '"If-None-Match: *" : "If-Match: *"', '"If-None-Match: *" : "X-Dropped: *"', "dataverse", "an update carries only the differing modeled fields and never creates", "data-plan"],
+  ["update-stale", "dataverse/data-plan.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "an update plan is rejected when the target changed after planning", "data-plan"],
+  ["update-default-block", "dataverse/data-plan.js", 'else if (onExisting === "update") {', "else if (true) {", "dataverse", "an existing differing row blocks by default and updates only on request", "data-plan"],
+  ["update-unchanged-count", "dataverse/data-plan.js", "(unchanged[entity.name] ?? 0) + 1", "(unchanged[entity.name] ?? 0)", "dataverse", "re-running an applied seed with onExisting update reports every row unchanged", "data-plan"],
+  ["update-order", "dataverse/data-plan.js", "[...creates, ...updates, ...links]", "[...creates, ...links, ...updates]", "dataverse", "a changeset runs creates, then updates, then link updates", "data-plan"],
+  ["on-existing-flag", "cli/builtins.js", 'params["on-existing"] === undefined', "true", "cli", "--on-existing selects how the built-in pipelines treat differing rows", "pipeline"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

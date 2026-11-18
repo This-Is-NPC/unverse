@@ -84,10 +84,21 @@ export async function dataFixture(input = sourceModel) {
         }
         values.push({ ...value, [pk]: id });
       } else {
-        assert.ok(existing);
+        if (!existing && part.includes("If-Match: *")) {
+          statuses.push(404);
+          continue;
+        }
+        // Without If-Match a PATCH upserts, as in Dataverse.
+        const row = existing ?? { [pk]: id };
+        if (!existing) values.push(row);
         for (const [name, binding] of Object.entries(value)) {
+          if (!name.endsWith("_nav@odata.bind")) {
+            row[name] = binding;
+            continue;
+          }
           const column = name.replace("_nav@odata.bind", "");
-          existing[`_${column}_value`] = /\(([^)]+)\)/.exec(binding)[1];
+          row[`_${column}_value`] =
+            binding === null ? null : /\(([^)]+)\)/.exec(binding)[1];
         }
       }
       next.set(set, values);

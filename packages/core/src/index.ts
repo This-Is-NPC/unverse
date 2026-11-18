@@ -54,6 +54,7 @@ export {
 } from "./dependencies.js";
 export {
   type DesiredData,
+  type OnExisting,
   type ResolvedData,
   resolveDesired,
   seedDesired,

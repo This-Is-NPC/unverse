@@ -3,7 +3,7 @@
 Unverse's local release candidate supports caller identity, role assignments,
 metadata discovery, OData reads, guarded additive schema changes, and verified
 Dataverse-to-PostgreSQL transfer, resource discovery, masked environment
-comparison, deterministic seed, and create-only Dataverse transfer. The
+comparison, deterministic seed, and guarded Dataverse transfer. The
 [installation instructions](../README.md#install) describe local candidate
 tarballs; no npm publication is implied.
 

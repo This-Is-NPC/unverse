@@ -799,7 +799,7 @@ export const resources: readonly ResourceSpec[] = [
   },
   {
     name: "pipeline",
-    summary: "Run data pipelines that produce reviewed create-only plans.",
+    summary: "Run data pipelines that produce reviewed data plans.",
     commands: [
       {
         name: "list",
@@ -825,7 +825,7 @@ export const resources: readonly ResourceSpec[] = [
         stage: "plan",
         effect: "read",
         summary:
-          "Run a pipeline with a read-only context and review its create-only data operations.",
+          "Run a pipeline with a read-only context and review its data operations.",
         flagsets: ["target", "output"],
         positionals: [pipelineArgument],
         passthrough: true,

@@ -579,7 +579,7 @@ Show a pipeline's description and its own flags without contacting Dataverse.
 
 ## pipeline plan
 
-Run a pipeline with a read-only context and review its create-only data operations.
+Run a pipeline with a read-only context and review its data operations.
 
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`

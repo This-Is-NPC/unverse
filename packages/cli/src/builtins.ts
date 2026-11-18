@@ -1,8 +1,13 @@
 import { join } from "node:path";
 import { seedDesired, transferDesired } from "@unverse/core";
-import { manifestFile, mappingFile, policyFile } from "./commands.js";
+import {
+  type FlagSpec,
+  manifestFile,
+  mappingFile,
+  policyFile,
+} from "./commands.js";
 import { readDocument, readMapping } from "./documents.js";
-import type { Pipeline } from "./pipeline.js";
+import type { Pipeline, PipelineContext } from "./pipeline.js";
 
 const seedName = /^[\w][\w.-]*$/;
 
@@ -12,6 +17,19 @@ export function seedPath(root: string, value: string): string {
     : value;
 }
 
+const onExistingFlag: FlagSpec = {
+  name: "--on-existing",
+  value: "block|update",
+  choices: ["block", "update"],
+  summary:
+    "What to do with a target row that differs: block the plan (default) or update the differing fields.",
+};
+
+const onExisting = (params: PipelineContext["params"]) =>
+  params["on-existing"] === undefined
+    ? {}
+    : { onExisting: params["on-existing"] as "block" | "update" };
+
 export function builtinPipelines(
   readFile: (path: string) => Promise<string>,
   root: string,
@@ -19,7 +37,7 @@ export function builtinPipelines(
   return {
     seed: {
       description:
-        "Plan deterministic fixture rows from a versioned declarative seed with keyed rows.",
+        "Plan deterministic fixture rows from a versioned declarative seed with keyed rows; existing rows block or update.",
       params: [
         {
           name: "--seed",
@@ -28,25 +46,30 @@ export function builtinPipelines(
             "Read a seed: a name resolves to .unverse/seeds/<name>.json, anything else is a file path.",
           required: true,
         },
+        onExistingFlag,
       ],
-      run: async (context) =>
-        seedDesired(
+      run: async (context) => ({
+        ...(await seedDesired(
           await readDocument(
             readFile,
             seedPath(root, String(context.params.seed)),
           ),
-        ),
+        )),
+        ...onExisting(context.params),
+      }),
     },
     transfer: {
       description:
-        "Plan a policy-filtered Dataverse-to-Dataverse create-only transfer from an export.",
-      params: [mappingFile, manifestFile, policyFile],
-      run: async (context) =>
-        transferDesired(
+        "Plan a policy-filtered Dataverse-to-Dataverse transfer from an export; existing rows block or update.",
+      params: [mappingFile, manifestFile, policyFile, onExistingFlag],
+      run: async (context) => ({
+        ...(await transferDesired(
           await readDocument(readFile, String(context.params["manifest-file"])),
           JSON.parse(await readFile(String(context.params["policy-file"]))),
           await readMapping(readFile, String(context.params["mapping-file"])),
-        ),
+        )),
+        ...onExisting(context.params),
+      }),
     },
   };
 }

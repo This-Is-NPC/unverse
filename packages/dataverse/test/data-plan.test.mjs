@@ -244,3 +244,130 @@ test("data plans reject modified desired data before writes", async () => {
   );
   assert.equal(fixture.batches.length, 0);
 });
+
+async function appliedSeed() {
+  const fixture = await dataFixture();
+  const spec = seedSpec(fixture.model, fixture.mapping, data);
+  const desired = await seedDesired(spec);
+  const plan = await planDesired(fixture.client, desired, fixture.environment);
+  await applyDataPlan(fixture.client, plan, fixture.environment, true);
+  const replan = async (changed = desired) =>
+    planDesired(
+      fixture.client,
+      { ...changed, onExisting: "update" },
+      fixture.environment,
+    );
+  return { ...fixture, spec, desired, replan };
+}
+
+function operations(batch) {
+  return [
+    ...batch.matchAll(
+      /(PATCH|DELETE) [^\r\n]+\r\n(?:Content-Type: [^\r\n]+\r\n)?(If-[A-Za-z-]+): \*\r\n\r\n([^\r\n]*)/g,
+    ),
+  ].map(([, method, header, body]) => ({ method, header, body }));
+}
+
+test("re-running an applied seed with onExisting update reports every row unchanged", async () => {
+  const fixture = await appliedSeed();
+  const plan = await fixture.replan();
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.update, []);
+  assert.deepEqual(plan.blocked, []);
+  assert.deepEqual(plan.unchanged, { parent: 1, child: 1 });
+  const report = await applyDataPlan(
+    fixture.client,
+    plan,
+    fixture.environment,
+    true,
+  );
+  assert.equal(report.checkpoint.state, "verified-resume");
+  assert.equal(fixture.batches.length, 1);
+});
+
+test("an update carries only the differing modeled fields and never creates", async () => {
+  const fixture = await appliedSeed();
+  fixture.rows.get("uv_parents")[0].uv_name = "Drifted";
+  const plan = await fixture.replan();
+  assert.deepEqual(plan.update, [
+    {
+      entity: "parent",
+      id: plan.update[0].id,
+      fields: { name: "Synthetic Parent" },
+    },
+  ]);
+  assert.deepEqual(plan.unchanged, { parent: 0, child: 1 });
+  const report = await applyDataPlan(
+    fixture.client,
+    plan,
+    fixture.environment,
+    true,
+  );
+  assert.equal(report.verified, true);
+  assert.deepEqual(operations(fixture.batches[1]), [
+    {
+      method: "PATCH",
+      header: "If-Match",
+      body: JSON.stringify({ uv_name: "Synthetic Parent" }),
+    },
+  ]);
+  assert.equal(fixture.rows.get("uv_parents")[0].uv_name, "Synthetic Parent");
+});
+
+test("an existing differing row blocks by default and updates only on request", async () => {
+  const fixture = await appliedSeed();
+  fixture.rows.get("uv_parents")[0].uv_name = "Drifted";
+  const blocked = await planDesired(
+    fixture.client,
+    fixture.desired,
+    fixture.environment,
+  );
+  assert.equal(blocked.onExisting, "block");
+  assert.equal(blocked.blocked.length, 1);
+  assert.deepEqual(blocked.update, []);
+  await assert.rejects(
+    planDesired(
+      fixture.client,
+      { ...fixture.desired, onExisting: "overwrite" },
+      fixture.environment,
+    ),
+    /onExisting/,
+  );
+});
+
+test("an update plan is rejected when the target changed after planning", async () => {
+  const fixture = await appliedSeed();
+  fixture.rows.get("uv_parents")[0].uv_name = "Drifted";
+  const plan = await fixture.replan();
+  fixture.rows.get("uv_parents")[0].uv_count = 99;
+  await assert.rejects(
+    applyDataPlan(fixture.client, plan, fixture.environment, true),
+    /stale/,
+  );
+  assert.equal(fixture.batches.length, 1);
+});
+
+test("a changeset runs creates, then updates, then link updates", async () => {
+  const fixture = await appliedSeed();
+  const spec = structuredClone(fixture.spec);
+  spec.rows.parent.push({
+    key: "added",
+    values: { ...spec.rows.parent[0].values, name: "Added" },
+  });
+  spec.rows.parent[0].values.name = "Renamed";
+  spec.rows.child[0].values.parentid = { key: "added" };
+  const plan = await fixture.replan(await seedDesired(spec));
+  assert.equal(plan.create.length, 1);
+  assert.equal(plan.update.length, 2);
+  await applyDataPlan(fixture.client, plan, fixture.environment, true);
+  assert.deepEqual(
+    operations(fixture.batches[1]).map(({ header, body }) =>
+      header === "If-None-Match"
+        ? "create"
+        : body.includes("@odata.bind")
+          ? "link"
+          : "update",
+    ),
+    ["create", "update", "link"],
+  );
+});

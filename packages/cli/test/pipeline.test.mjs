@@ -564,3 +564,39 @@ test("seed plan and transfer plan no longer exist", async () => {
     );
   }
 });
+
+test("--on-existing selects how the built-in pipelines treat differing rows", async () => {
+  const fixture = await dataFixture();
+  await inProject(
+    {
+      "seed.json": JSON.stringify(
+        seedSpec(fixture.model, fixture.mapping, transferData),
+      ),
+    },
+    async (root) => {
+      const plan = (...extra) =>
+        run(
+          [
+            "pipeline",
+            "plan",
+            "seed",
+            "--env",
+            "dev",
+            "--format",
+            "json",
+            "--",
+            "--seed",
+            join(root, "seed.json"),
+            ...extra,
+          ],
+          root,
+          () => fixture.client,
+        );
+      const byDefault = await plan();
+      assert.equal(JSON.parse(byDefault.output[0]).data.onExisting, "block");
+      const update = await plan("--on-existing", "update");
+      assert.equal(JSON.parse(update.output[0]).data.onExisting, "update");
+      assert.equal((await plan("--on-existing", "overwrite")).code, 2);
+    },
+  );
+});

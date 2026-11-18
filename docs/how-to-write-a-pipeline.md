@@ -1,7 +1,7 @@
 # Write and run a pipeline
 
 **The question:** How do I keep my own data logic in my repository and have
-Unverse turn what it produces into a reviewed, create-only plan?
+Unverse turn what it produces into a reviewed data plan?
 
 This page is enough on its own for a new pipeline. It needs
 [a configured environment](how-to-connect-an-environment.md) and
@@ -49,7 +49,11 @@ would any script. Loading it runs its top-level code, so `pipeline list` and
      required, choices }`, the same fields every command flag has.
    - `run(ctx)`: returns `{ model, mapping, data }`, where `data` holds the
      rows of every entity with their IDs. Optional `source` and `basis` are
-     described in [design §22](design.md#22-pipelines).
+     described in [design §22](design.md#22-pipelines). The optional
+     `onExisting` is `"block"` (the default: a target row that differs
+     blocks the plan) or `"update"` (the plan updates only the differing
+     fields; an identical row is reported `unchanged`). Return it from `run`,
+     or take it from a flag such as the built-ins' `--on-existing`.
 
    `ctx` has five members and nothing else:
 
@@ -73,12 +77,12 @@ would any script. Loading it runs its top-level code, so `pipeline list` and
        {
          "name": "seed",
          "origin": "built-in",
-         "description": "Plan deterministic fixture rows from a versioned declarative seed with keyed rows."
+         "description": "Plan deterministic fixture rows from a versioned declarative seed with keyed rows; existing rows block or update."
        },
        {
          "name": "transfer",
          "origin": "built-in",
-         "description": "Plan a policy-filtered Dataverse-to-Dataverse create-only transfer from an export."
+         "description": "Plan a policy-filtered Dataverse-to-Dataverse transfer from an export; existing rows block or update."
        },
        {
          "name": "families",
@@ -130,7 +134,7 @@ would any script. Loading it runs its top-level code, so `pipeline list` and
 
    The pipeline ran with a read-only context. Unverse validated what it
    returned exactly as it validates a seed, read the target, and wrote a plan
-   with `kind: "data"` and `effect: "write"`. It is create-only: an existing
+   with `kind: "data"` and `effect: "write"`. It is create-only by default: an existing
    row that differs is blocked, never updated.
 
 5. Check the plan without writing:

@@ -75,7 +75,8 @@ existing application tables.
 **Development convenience.** Search display and internal names, inspect the
 authenticated caller's roles, and export [spreadsheet-safe CSV](docs/how-to-export-csv.md).
 [Dataverse-to-Dataverse data plans](docs/how-to-transfer-dataverse.md) require
-an explicit field-copy policy and never clear or overwrite target rows.
+an explicit field-copy policy and never clear target rows; they update an
+existing row only when you ask, and only its differing fields.
 
 **Your own pipelines.** Keep data pipelines in your repository under
 `.unverse/pipelines`; Unverse runs them with a read-only context and turns what
@@ -120,7 +121,7 @@ can allowlist the `read` commands.
 | `variable list` | Inspect masked settings |
 | `access plan` | Review adding existing security roles to teams |
 | `pipeline list` / `pipeline show <pipeline>` | List and describe the built-in `seed` and `transfer` pipelines and your own in `.unverse/pipelines` offline |
-| `pipeline plan <pipeline> -- <flags>` | Run a pipeline and review its create-only data plan |
+| `pipeline plan <pipeline> -- <flags>` | Run a pipeline and review its data plan |
 | `apply <plan-file>` | Apply a confirmed, fresh, environment-bound schema, data, or access plan |
 | `verify <plan-file>` | Check without writing whether a plan is satisfied |
 | `connector list` | Inspect visible solution-aware connector metadata |

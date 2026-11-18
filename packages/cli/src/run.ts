@@ -734,7 +734,7 @@ export async function runCli(
           data,
           evidence: [
             `Pipeline ${prepared.entry.name} (${prepared.entry.path ?? "built-in"}) returned the desired data through a read-only context.`,
-            "The target schema and data state were read to plan create-only operations.",
+            "The target schema and data state were read to plan the data operations.",
           ],
           coverage: {
             complete: true,

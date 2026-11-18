@@ -1,7 +1,8 @@
 # Seed deterministic development data
 
 **The question:** How do I create reproducible fixture records without copying
-internal application pipelines or overwriting another person's rows?
+internal application pipelines, and re-run them without duplicating or
+overwriting another person's rows?
 
 This page requires [a satisfied schema](how-to-apply-schema.md) and a dedicated
 development environment. It does not provision a schema implicitly.
@@ -50,7 +51,8 @@ which may be empty. Environment-local external references are not portable seed 
    The synthetic integration verified counts, IDs, relationships, and declared
    values. A repeated satisfied plan returned checkpoint state `verified-resume`
    without sending another batch. Different existing rows block instead of
-   being repaired, reseeded, or overwritten.
+   being repaired, reseeded, or overwritten, unless you ask for updates in
+   [the next section](#re-run-or-update-a-seed).
 
 3. Check the result without writing:
 
@@ -62,15 +64,68 @@ which may be empty. Environment-local external references are not portable seed 
    conflicts, and exits 1 with the remaining `create` and `blocked` lists
    otherwise.
 
+## Re-run or update a seed
+
+A seed has deterministic IDs, so planning it again finds the rows it created.
+By default a row that differs from the seed blocks the plan. Add
+`--on-existing update` to let the plan change it:
+
+```sh
+unverse pipeline plan seed --env dev --format json -- --seed seed.json --on-existing update > seed-plan.json
+```
+
+`--on-existing` is `block` (the default) or `update`. Right after a successful
+apply the plan reports every row `unchanged` and has nothing to do (excerpt of
+the real output; the fixture has one `parent` and one `child` row):
+
+```json
+{
+  "onExisting": "update",
+  "create": [],
+  "update": [],
+  "unchanged": { "child": 1, "parent": 1 },
+  "blocked": []
+}
+```
+
+An unchanged row costs no operation. If somebody edited the parent's name in
+the target, the same command proposes an `update` that lists only the
+differing modeled fields (excerpt):
+
+```json
+{
+  "onExisting": "update",
+  "create": [],
+  "update": [
+    {
+      "entity": "parent",
+      "id": "c2d5338b-6fb3-80bf-8c06-7c6f69f865ad",
+      "fields": { "name": "Synthetic Parent" }
+    }
+  ],
+  "unchanged": { "child": 1, "parent": 0 },
+  "blocked": []
+}
+```
+
+Without the flag the same target gives the plan a `blocked` entry
+(`An existing row differs; set onExisting to update to change it.`) and
+`apply` refuses it. `apply` sends the update as a `PATCH` with `If-Match: *`,
+so it can only change a row that exists, and it sends only the fields listed.
+Columns the model does not describe are never read or written. The plan
+records the target values it compared; if the target changes between `plan`
+and `apply`, `apply` rejects the plan as stale and writes nothing. Plan again.
+
 ## What can go wrong
 
 Apply rechecks the target identity and data fingerprint. New rows are created
-first, then their relationships, in one atomic changeset. Creation uses
-`If-None-Match: *`, so a concurrent record cannot be silently updated. A failed
-changeset is not a successful seed. No destructive purge command is added.
+first, then updates, then their relationships, in one atomic changeset.
+Creation uses `If-None-Match: *`, so a concurrent record cannot be silently
+updated; an update uses `If-Match: *`, so it cannot create. A failed
+changeset is not a successful seed.
 
 Each changeset is limited to 1000 operations and 4 MB; each non-null relationship
-uses another operation. There is no automatic splitting or per-row resume.
+and each changed field group uses another operation. There is no automatic splitting or per-row resume.
 A lost response has an unknown outcome: inspect and re-plan. Fully matching
 records become a verified no-op; conflicting or partially different records
 remain blocked. Keep plan files private because they contain values and IDs.

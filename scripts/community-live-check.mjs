@@ -76,7 +76,7 @@ try {
         client.atomicBatch([
           {
             path: `${table.entitySet}(${id})`,
-            createOnly: true,
+            kind: "create",
             body: {
               [`${mapping.prefix}_name`]: "Owned rollback probe",
               [`${mapping.prefix}_status`]: 1,
@@ -84,7 +84,7 @@ try {
           },
           {
             path: `${table.entitySet}(${randomUUID()})`,
-            createOnly: true,
+            kind: "create",
             body: { [`${mapping.prefix}_invalidcolumn`]: true },
           },
         ]),

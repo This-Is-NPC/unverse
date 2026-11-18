@@ -708,15 +708,27 @@ people. The feature is not an automatic anonymizer. Source and target
 organizations must differ; source rereading and continuous sync are not implied.
 
 Every pipeline uses one data plan/executor. Plans bind transformed data, target identity,
-current target fingerprint, proposed creates, conflicts, and policy fingerprint.
-`apply` requires confirmation, validates plan integrity (the plan has `kind`
-`data` and `effect`, covered by its fingerprint), re-authenticates the
-target and rechecks current state. Existing differing rows are blocked. A
-satisfied plan is verified without writes; an unsatisfied stale plan is rejected.
+current target fingerprint, proposed creates, updates, unchanged counts, conflicts,
+and policy fingerprint. `apply` requires confirmation, validates plan integrity
+(the plan has `kind` `data` and `effect`, covered by its fingerprint),
+re-authenticates the target and rechecks current state. A satisfied plan is
+verified without writes; an unsatisfied stale plan is rejected.
 
-All creates and then links go in one bounded multipart changeset. Conditional
-create requests use `If-None-Match: *`; link updates affect only IDs created in
-that same changeset. No pre-existing row is modified. Every operation must
+The desired data's `onExisting` is `block` (the default) or `update`. It decides
+what a target row with the desired ID becomes when its modeled fields differ:
+`block` records a conflict and the plan cannot apply; `update` records an
+update that carries only the differing modeled fields. A row whose modeled
+fields are all equal is `unchanged`: counted per entity, with no operation, so
+re-running a seed after a successful apply reports every row unchanged. The
+plan's observed fingerprint covers every target value it compared, so a target
+changed after planning makes `apply` reject the plan as stale.
+
+All creates, then updates, then link updates go in one bounded multipart
+changeset. Conditional create requests use `If-None-Match: *`; update requests
+use `If-Match: *`, so an update can never create a row and a create can never
+overwrite one. An update names only rows the plan lists and only the differing
+fields; a changed reference is a link update, and a reference that became null
+is sent as a null binding. Every operation must
 confirm success before post-write equivalence can report success. The unit of
 commit/resume is one changeset (at most 1000 operations and a 4 MB request), not
 a row checkpoint. A lost response remains unknown until inspection; re-plan
@@ -1128,6 +1140,7 @@ interface DesiredData {
   data: Record<string, Record<string, unknown>[]>;   // rows with IDs
   source?: { environment: SchemaEnvironment; mapping: DataverseMapping };
   basis?: string;
+  onExisting?: "block" | "update";                   // default "block" (§16)
 }
 ```
 
@@ -1137,8 +1150,8 @@ interface DesiredData {
 `source` it has purpose `transfer`, and the target organization must differ
 from the source. `basis` is what the plan fingerprints as the input that
 determined the rows; it defaults to the dataset fingerprint. The plan is
-create-only and bound to the `--env` target; conflicts block, and updates are
-not part of it.
+bound to the `--env` target. `onExisting` selects between blocking and updating
+a differing row (§16); an identical row is reported unchanged.
 
 **The context.**
 
@@ -1167,8 +1180,9 @@ without a request.
 **Built-ins.** `seed` takes `--seed <name|path>`: a name (letters, digits,
 `.`, `_`, `-`, not ending in `.json`) resolves to `.unverse/seeds/<name>.json`
 and anything else is a file path used as is. `transfer` takes
-`--mapping-file`, `--manifest-file`, and `--policy-file`. Both call the same
-`planDesired` as a user pipeline.
+`--mapping-file`, `--manifest-file`, and `--policy-file`. Both accept
+`--on-existing block|update`; without it the desired data keeps `block`. Both
+call the same `planDesired` as a user pipeline.
 
 **Errors.** A bad pipeline file, bad flags, an invalid desired dataset, and an
 exception thrown by the pipeline's own code (reported as `Pipeline <name>

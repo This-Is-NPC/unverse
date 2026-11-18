@@ -53,9 +53,12 @@ identifiers and every permitted copied field have been reviewed and authorized.
    ```
 
    The same guarded data executor as seed creates rows before links and checks
-   modeled invariants afterward. Existing identical rows are no-ops; existing
-   different rows are blocks. Unrelated target records are not deleted or
-   updated. The returned report records counts, identity maps, differences,
+   modeled invariants afterward. Existing identical rows are no-ops and are
+   counted as `unchanged`; existing different rows are blocks. Add
+   `--on-existing update` to the plan command to update them instead: the plan
+   then lists only the differing fields, as
+   [for a seed](how-to-seed-data.md#re-run-or-update-a-seed). Unrelated target
+   records are never deleted or updated. The returned report records counts, identity maps, differences,
    and a changeset-level checkpoint. `unverse verify transfer-plan.json --env
    test` re-checks the plan afterwards without writing and exits 1 while rows
    are missing or conflicting.
@@ -84,8 +87,9 @@ are rejected, not dropped. See
 ## What can go wrong
 
 Use [the seed failure and resume rules](how-to-seed-data.md#what-can-go-wrong):
-the same 1000-operation/4 MB bound, no automatic writes retry, no overwrite,
-and no per-row checkpointing apply. Changesets create first and link second,
+the same 1000-operation/4 MB bound, no automatic writes retry,
+and no per-row checkpointing apply; overwrite happens only with
+`--on-existing update`, and only for fields that differ. Changesets create first and link second,
 including cycles. Target reads before and after the batch are not a single
 transaction snapshot; concurrent modifications can invalidate verification.
 

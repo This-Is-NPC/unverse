@@ -161,7 +161,7 @@ The synthetic profiles match. Real differences report field names, never values.
 
 ## 21. Seed planning
 
-`unverse pipeline plan seed` runs the built-in seed pipeline. Deterministic fixture IDs and create-only operations are reviewed before apply.
+`unverse pipeline plan seed` runs the built-in seed pipeline. Deterministic fixture IDs and the proposed creates, updates, and unchanged rows are reviewed before apply.
 
 ![Seed plan](img/19-seed-plan.png)
 

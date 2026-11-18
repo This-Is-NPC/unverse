@@ -130,7 +130,7 @@ export class DataverseClient {
   async atomicBatch(
     operations: readonly {
       readonly path: string;
-      readonly createOnly: boolean;
+      readonly kind: "create" | "update";
       readonly body: Readonly<Record<string, unknown>>;
     }[],
   ): Promise<void> {
@@ -157,7 +157,7 @@ export class DataverseClient {
         "",
         `PATCH ${url} HTTP/1.1`,
         "Content-Type: application/json",
-        operation.createOnly ? "If-None-Match: *" : "If-Match: *",
+        operation.kind === "create" ? "If-None-Match: *" : "If-Match: *",
         "",
         JSON.stringify(operation.body),
       ].join("\r\n");
