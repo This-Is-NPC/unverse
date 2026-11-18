@@ -183,6 +183,13 @@ mutations.push(
   ["platform-forbidden-exit", "dataverse/client.js", "const failure = serviceError(response, service);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response, service);', "cli", "platform permission failures exit four instead of listing nothing"],
 );
 
+mutations.push(
+  ["access-root-role", "dataverse/access.js", "roleIn(client, roleName, team.businessUnitId)", 'roleIn(client, roleName, (await client.collect("businessunits?$select=businessunitid")).rows[0].businessunitid)', "dataverse", "resolves a role in the team's business unit, not the root", "access"],
+  ["access-assigned-missing", "dataverse/access.js", "assigned.has(roleId)", "false", "dataverse", "separates satisfied roles from missing ones", "access"],
+  ["access-secret", "dataverse/discovery.js", "type === 100000005", "false", "dataverse", "rejects unset, secret, and unknown team variables", "access"],
+  ["access-stale", "dataverse/access.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "access apply rejects a stale plan before any write", "access"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

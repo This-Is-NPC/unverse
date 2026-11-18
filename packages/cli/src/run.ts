@@ -41,6 +41,7 @@ import {
   listArtifacts,
   OrganizationMismatchError,
   type PlatformClient,
+  planAccess,
   planDataverseTransfer,
   planSeed,
   platformApps,
@@ -516,13 +517,19 @@ export async function runCli(
         runtime,
       );
     }
-    if (["seed plan", "transfer plan"].includes(command)) {
+    if (["seed plan", "transfer plan", "access plan"].includes(command)) {
       const context = {
         ...environment,
         organizationId: identity.organizationId,
       };
       let data: unknown;
-      if (command === "seed plan")
+      if (command === "access plan")
+        data = await planAccess(
+          client,
+          JSON.parse(await runtime.readFile(flags.get("--access-file") ?? "")),
+          context,
+        );
+      else if (command === "seed plan")
         data = await planSeed(
           client,
           JSON.parse(await runtime.readFile(flags.get("--seed-file") ?? "")),
@@ -550,7 +557,7 @@ export async function runCli(
           status: "ok",
           data,
           evidence: [
-            "The target schema and data state were read to plan create-only operations.",
+            "The target schema, data and access state were read to plan the reviewed operations.",
           ],
           coverage: {
             complete: true,

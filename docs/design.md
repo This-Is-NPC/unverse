@@ -23,10 +23,11 @@ checks for automation.
 
 It does not provide a web application, long-running server, complete Power
 Apps replacement, continuous synchronization, arbitrary SQL translation,
-automatic impersonation, role assignment, effective access checks, or a
-complete Dataverse migration. Declarative provisioning and verified
+automatic impersonation, role assignment to users, effective access checks, or
+a complete Dataverse migration. Declarative provisioning and verified
 PostgreSQL transfer are later milestones. Security role provisioning (§14)
-is in scope; assigning a role to a user or team comes later.
+and assigning existing roles to existing teams through a reviewed plan (§21)
+are in scope; assigning a role to a user comes later.
 
 ## 2. Users and questions
 
@@ -906,3 +907,33 @@ Documentation used: [Apps - Get AdminApps](https://learn.microsoft.com/en-us/res
 [Cloud Flows - List Cloud Flows](https://learn.microsoft.com/en-us/rest/api/power-platform/powerautomate/cloud-flows/list-cloud-flows),
 [Authentication](https://learn.microsoft.com/en-us/power-platform/admin/programmability-authentication-v2),
 and [Creating a service principal application using API](https://learn.microsoft.com/en-us/power-platform/admin/powerplatform-api-create-service-principal).
+
+## 21. Team role assignment
+
+An access document (`accessVersion` 1) lists teams and the names of existing
+security roles each team needs. A team is selected by exactly one of `id`,
+`name` (must match exactly one team) or `environmentVariable`. A variable
+selects the team by its active override, else its default value; a secret,
+unset or ambiguous variable is an input error (exit 2). The plan records the
+resolved team ID; the selector stays the variable's schema name.
+
+`access plan` (effect `read`) reads the teams, the roles assigned to each
+team and, for each role name, the roles of that name in the team's own
+business unit. Roles are per business unit: a role of the root business unit
+has a copy for each child business unit, linked by `parentrootroleid`, and
+Dataverse rejects associating a role from another business unit with a team.
+Exactly one match is required. None or several block that role with a reason.
+A role the team already has is `satisfied`; any other becomes an
+`assign-team-role` operation (`teamId`, `teamName`, `roleId`, `roleName`).
+The plan has `kind` `access`, `effect` `write`, the environment, the
+document, the resolved teams, a fingerprint of the observed state, and its
+own fingerprint.
+
+`apply` requires `--confirm`, checks the plan fingerprint and environment,
+re-resolves everything and rejects the plan as stale when the result differs.
+A blocked plan is rejected before any write. Each operation is one
+`POST teams({teamId})/teamroles_association/$ref` with
+`{"@odata.id": ".../roles({roleId})"}`. The plan is read again afterwards and
+`verified` is true when no operation or blocked role remains. `verify`
+performs that read without writing. A role is never removed from a team, and
+no user assignment or effective record access is checked.

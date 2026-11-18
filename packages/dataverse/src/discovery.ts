@@ -171,65 +171,58 @@ export async function variableDefinitions(client: DataverseClient) {
   }));
 }
 
+export async function readVariable(
+  client: DataverseClient,
+  definition: Awaited<ReturnType<typeof variableDefinitions>>[number],
+): Promise<Variable> {
+  const { id, type } = definition;
+  const base = {
+    schemaName: definition.schemaName,
+    name: definition.name,
+    type,
+  };
+  if (type === 100000005)
+    return { ...base, configured: null, value: null, source: "secret" };
+  const values = await client.collect(
+    endpoint("environmentvariablevalues", {
+      $select: "value",
+      $filter: `_environmentvariabledefinitionid_value eq ${id} and statecode eq 0`,
+    }),
+  );
+  if (values.rows.length > 1)
+    return { ...base, configured: null, value: null, source: "ambiguous" };
+  const override =
+    values.rows.length === 1
+      ? nullableText(values.rows[0] ?? {}, "value")
+      : null;
+  const defaults = await client.collect(
+    endpoint("environmentvariabledefinitions", {
+      $select: "defaultvalue",
+      $filter: `environmentvariabledefinitionid eq ${id}`,
+    }),
+  );
+  if (defaults.rows.length !== 1)
+    throw new DataverseError(
+      "service",
+      "Variable definition changed during inventory.",
+    );
+  const fallback = nullableText(defaults.rows[0] ?? {}, "defaultvalue");
+  const value = override ?? fallback;
+  return {
+    ...base,
+    configured: value !== null,
+    value,
+    source:
+      override !== null ? "override" : fallback !== null ? "default" : "unset",
+  };
+}
+
 async function readVariables(
   client: DataverseClient,
 ): Promise<readonly Variable[]> {
   const result: Variable[] = [];
-  for (const definition of await variableDefinitions(client)) {
-    const { id, type } = definition;
-    const base = {
-      schemaName: definition.schemaName,
-      name: definition.name,
-      type,
-    };
-    if (type === 100000005) {
-      result.push({ ...base, configured: null, value: null, source: "secret" });
-      continue;
-    }
-    const values = await client.collect(
-      endpoint("environmentvariablevalues", {
-        $select: "value",
-        $filter: `_environmentvariabledefinitionid_value eq ${id} and statecode eq 0`,
-      }),
-    );
-    if (values.rows.length > 1) {
-      result.push({
-        ...base,
-        configured: null,
-        value: null,
-        source: "ambiguous",
-      });
-      continue;
-    }
-    const override =
-      values.rows.length === 1
-        ? nullableText(values.rows[0] ?? {}, "value")
-        : null;
-    const defaults = await client.collect(
-      endpoint("environmentvariabledefinitions", {
-        $select: "defaultvalue",
-        $filter: `environmentvariabledefinitionid eq ${id}`,
-      }),
-    );
-    if (defaults.rows.length !== 1)
-      throw new DataverseError(
-        "service",
-        "Variable definition changed during inventory.",
-      );
-    const fallback = nullableText(defaults.rows[0] ?? {}, "defaultvalue");
-    const value = override ?? fallback;
-    result.push({
-      ...base,
-      configured: value !== null,
-      value,
-      source:
-        override !== null
-          ? "override"
-          : fallback !== null
-            ? "default"
-            : "unset",
-    });
-  }
+  for (const definition of await variableDefinitions(client))
+    result.push(await readVariable(client, definition));
   return result.sort((a, b) => a.schemaName.localeCompare(b.schemaName));
 }
 

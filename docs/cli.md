@@ -517,6 +517,22 @@ Generate deterministic fixture IDs and review create-only data operations.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--seed-file <path>` (required): Read a versioned declarative seed with keyed rows.
 
+## access plan
+
+Resolve teams and the roles in their business units and review add-only role assignments.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse access plan [--config <path>] [--env <name>] [--format <human|json|csv>] --access-file <path>`
+
+### Flags
+
+- `--config <path>`: Read this configuration file; overrides UNVERSE_CONFIG and the .unverse/config.json found upward from the current directory.
+- `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+- `--access-file <path>` (required): Read a versioned document listing teams and the role names each team needs.
+
 ## transfer plan
 
 Review a policy-filtered Dataverse-to-Dataverse create-only transfer.
@@ -616,7 +632,7 @@ Apply a reviewed, fresh, environment-bound plan of any kind after explicit confi
 
 ### Exit codes
 
-- `1`: A data plan was applied and post-apply verification failed.
+- `1`: A data or access plan was applied and post-apply verification failed.
 - `7`: Operations remain or are blocked after a schema plan was applied.
 
 ## verify

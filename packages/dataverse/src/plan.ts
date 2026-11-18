@@ -8,6 +8,7 @@ import {
   record,
   type SchemaEnvironment,
 } from "@unverse/core";
+import { applyAccessPlan, verifyAccessPlan } from "./access.js";
 import { type DataverseClient, DataverseError } from "./client.js";
 import { applyDataPlan, verifyDataPlan } from "./data-plan.js";
 import { applySchema, assertEnvironment, inspectSchema } from "./schema.js";
@@ -34,6 +35,10 @@ export async function applyPlan(
     ].some((remaining) => remaining.length !== 0);
     return { kind, status: unfinished ? "inconclusive" : "ok", report };
   }
+  if (kind === "access") {
+    const report = await applyAccessPlan(client, input, environment, confirm);
+    return { kind, status: report.verified ? "ok" : "failed", report };
+  }
   const report = await applyDataPlan(client, input, environment, confirm);
   return { kind, status: report.verified ? "ok" : "failed", report };
 }
@@ -47,7 +52,9 @@ export async function verifyPlan(
   const report =
     kind === "schema"
       ? await verifySchemaPlan(client, input, environment)
-      : await verifyDataPlan(client, input, environment);
+      : kind === "access"
+        ? await verifyAccessPlan(client, input, environment)
+        : await verifyDataPlan(client, input, environment);
   return { kind, status: report.satisfied ? "ok" : "failed", report };
 }
 

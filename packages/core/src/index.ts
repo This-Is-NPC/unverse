@@ -1,4 +1,10 @@
 export {
+  type AccessDocument,
+  type AccessTeam,
+  parseAccessDocument,
+  type TeamSelector,
+} from "./access.js";
+export {
   type ArtifactAbsence,
   type ArtifactField,
   type ArtifactItem,

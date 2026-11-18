@@ -14,6 +14,11 @@ import transferModel from "../../core/test/fixtures/schema.json" with {
   type: "json",
 };
 import { seedSpec } from "../../core/test/fixtures/seed.mjs";
+import {
+  accessFixture,
+  childTeam,
+  variableSecret,
+} from "../../dataverse/test/fixtures/access.mjs";
 import { artifactFixture } from "../../dataverse/test/fixtures/artifacts.mjs";
 import { dataFixture } from "../../dataverse/test/fixtures/data.mjs";
 import {
@@ -1552,4 +1557,50 @@ test("the Dataverse source is the default and adds no source field", async () =>
       },
     ]);
   }
+});
+
+test("access plan, apply and verify assign roles through one reviewed plan", async () => {
+  const fixture = accessFixture();
+  const output = [];
+  const documents = {
+    [discoveredConfig]: validConfig,
+    "access.json": JSON.stringify({
+      accessVersion: 1,
+      teams: [{ team: { id: childTeam }, roles: ["sr-Example-Users"] }],
+    }),
+    "secret.json": JSON.stringify({
+      accessVersion: 1,
+      teams: [{ team: { environmentVariable: variableSecret }, roles: ["x"] }],
+    }),
+  };
+  const base = {
+    ...runtime(() => validConfig, output),
+    readFile: async (path) => documents[path],
+    connect: () => fixture.client,
+  };
+  const common = ["--env", "dev", "--format", "json"];
+  assert.equal(
+    await runCli(
+      ["access", "plan", ...common, "--access-file", "access.json"],
+      base,
+    ),
+    0,
+  );
+  const reviewed = JSON.parse(output[0]).data;
+  assert.equal(reviewed.kind, "access");
+  documents["plan.json"] = output[0];
+  assert.equal(await runCli(["verify", "plan.json", ...common], base), 1);
+  assert.equal(
+    await runCli(["apply", "plan.json", "--confirm", ...common], base),
+    0,
+  );
+  assert.equal(fixture.writes.length, 1);
+  assert.equal(await runCli(["verify", "plan.json", ...common], base), 0);
+  assert.equal(
+    await runCli(
+      ["access", "plan", ...common, "--access-file", "secret.json"],
+      base,
+    ),
+    2,
+  );
 });

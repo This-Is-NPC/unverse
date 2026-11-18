@@ -749,6 +749,30 @@ export const resources: readonly ResourceSpec[] = [
     ],
   },
   {
+    name: "access",
+    summary: "Plan security role assignments to teams.",
+    commands: [
+      {
+        name: "plan",
+        stage: "plan",
+        effect: "read",
+        summary:
+          "Resolve teams and the roles in their business units and review add-only role assignments.",
+        flagsets: ["target", "output"],
+        flags: [
+          {
+            name: "--access-file",
+            value: "path",
+            summary:
+              "Read a versioned document listing teams and the role names each team needs.",
+            required: true,
+          },
+        ],
+        outputs: tabular,
+      },
+    ],
+  },
+  {
     name: "transfer",
     summary: "Plan a Dataverse-to-Dataverse transfer.",
     commands: [
@@ -824,7 +848,7 @@ export const rootCommands: readonly CommandSpec[] = [
     positionals: [planFile],
     outputs: tabular,
     exits: {
-      1: "A data plan was applied and post-apply verification failed.",
+      1: "A data or access plan was applied and post-apply verification failed.",
       7: "Operations remain or are blocked after a schema plan was applied.",
     },
   },

@@ -108,7 +108,8 @@ can allowlist the `read` commands.
 | `variable list` | Inspect masked settings |
 | `seed plan` | Review deterministic development fixtures |
 | `transfer plan` | Review a create-only Dataverse transfer |
-| `apply <plan-file>` | Apply a confirmed, fresh, environment-bound schema, seed, or transfer plan |
+| `access plan` | Review adding existing security roles to teams |
+| `apply <plan-file>` | Apply a confirmed, fresh, environment-bound schema, seed, transfer, or access plan |
 | `verify <plan-file>` | Check without writing whether a plan is satisfied |
 | `connector list` | Inspect visible solution-aware connector metadata |
 | `connref list` / `connref show <reference-id>` | Inspect bindings without claiming health |

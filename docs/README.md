@@ -20,6 +20,7 @@ tarballs; no npm publication is implied.
    then [apply the reviewed plan](how-to-apply-schema.md).
 6. [Export data](how-to-export-data.md), [import it](how-to-import-data.md),
    and [verify the transfer](how-to-verify-transfer.md).
+   [Assign roles to teams](how-to-assign-team-roles.md) with a reviewed plan.
 7. Contributors start with [design](design.md) and [agent rules](../AGENTS.md).
 
 ## When you know what you want
@@ -44,6 +45,7 @@ tarballs; no npm publication is implied.
 | Which environment settings differ? | [Compare environments](how-to-compare-environments.md) |
 | How do I export results for a spreadsheet? | [CSV output](how-to-export-csv.md) |
 | How do I seed reproducible development data? | [Seed data](how-to-seed-data.md) |
+| How do I give a team its security roles? | [Assign team roles](how-to-assign-team-roles.md) |
 | How do I transfer without clearing the destination? | [Dataverse transfer](how-to-transfer-dataverse.md) |
 | Which connector and connection bindings are visible? | [Inspect connections](how-to-inspect-connections.md) |
 | How do I visualize artifact dependencies? | [Explore dependencies](how-to-explore-dependencies.md) |

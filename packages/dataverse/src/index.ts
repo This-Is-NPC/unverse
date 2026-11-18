@@ -1,3 +1,4 @@
+export { type AccessPlan, planAccess } from "./access.js";
 export { listArtifacts } from "./artifacts.js";
 export {
   type Credential,
