@@ -8,7 +8,8 @@
     "dist/*.js",
     "dist/*.js.map",
     "dist/*.d.ts",
-    "dist/LICENSE"
+    "dist/LICENSE",
+    "dist/skills/unverse/SKILL.md"
   ],
   "bin": {
     "unverse": "./dist/main.js"

@@ -254,6 +254,23 @@ ${routes.map(renderCommandReference).join("\n\n")}
 `;
 }
 
+export function renderSkillCommands(): string {
+  return stages
+    .flatMap(({ stage, title }) => [
+      `### ${title}`,
+      "",
+      ...routes
+        .filter((route) => route.command.stage === stage)
+        .map(
+          (route) =>
+            `- \`${route.path}\` (effect: ${route.command.effect}): \`${usage(route)}\``,
+        ),
+      "",
+    ])
+    .join("\n")
+    .trimEnd();
+}
+
 export function specDocument(): unknown {
   return {
     specVersion,

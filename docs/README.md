@@ -23,7 +23,9 @@ tarballs; no npm publication is implied.
    [Assign roles to teams](how-to-assign-team-roles.md) with a reviewed plan.
 7. [Write your own pipeline](how-to-write-a-pipeline.md) when seed and
    transfer do not fit.
-8. Contributors start with [design](design.md) and [agent rules](../AGENTS.md).
+8. [Teach an AI agent to use Unverse](how-to-use-the-agent-skill.md) with the
+   shipped skill.
+9. Contributors start with [design](design.md) and [agent rules](../AGENTS.md).
 
 ## When you know what you want
 
@@ -54,6 +56,7 @@ tarballs; no npm publication is implied.
 | Which connector and connection bindings are visible? | [Inspect connections](how-to-inspect-connections.md) |
 | How do I visualize artifact dependencies? | [Explore dependencies](how-to-explore-dependencies.md) |
 | Which observed consumers should I review? | [Assess impact](how-to-assess-dependency-impact.md) |
+| How do I give an AI coding agent the rules for using Unverse? | [Use the agent skill](how-to-use-the-agent-skill.md) |
 | What rules apply to changes? | [Agent rules](../AGENTS.md) |
 | What does each terminal view show? | [Screens](screens.md) |
 

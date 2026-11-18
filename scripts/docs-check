@@ -8,9 +8,14 @@ const markdownFiles = collectMarkdown(root).sort();
 const failures = [];
 
 const cliReference = resolve(root, "docs/cli.md");
-const generatedCliReference = runCliReferenceGenerator(root);
+const generatedCliReference = runGenerator(root, "generate-cli-docs");
 if (!existsSync(cliReference) || readFileSync(cliReference, "utf8") !== generatedCliReference) {
   failures.push("docs/cli.md is stale; run mise run docs-cli.");
+}
+
+const skillFile = resolve(root, "skills/unverse/SKILL.md");
+if (readFileSync(skillFile, "utf8") !== runGenerator(root, "generate-skill")) {
+  failures.push("skills/unverse/SKILL.md is stale; run mise run skill.");
 }
 
 for (const file of markdownFiles) {
@@ -88,9 +93,9 @@ function display(rootDirectory, file) {
   return basename(rootDirectory) === "" ? file : relative(rootDirectory, file);
 }
 
-function runCliReferenceGenerator(rootDirectory) {
+function runGenerator(rootDirectory, name) {
   const result = spawnSync(process.execPath, [
-    "packages/cli/dist/generate-cli-docs.js",
+    `packages/cli/dist/${name}.js`,
     "--stdout",
   ], { cwd: rootDirectory, encoding: "utf8" });
   if (result.status !== 0) {

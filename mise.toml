@@ -90,6 +90,11 @@ description = "Generate the CLI reference from command definitions"
 depends = ["build-cli"]
 run = "scripts/docs-cli"
 
+[tasks.skill]
+description = "Regenerate the command section of the agent skill from command definitions"
+depends = ["build-cli"]
+run = "scripts/skill"
+
 [tasks.docs-check]
 description = "Verify documentation freshness and local links"
 depends = ["build-cli"]

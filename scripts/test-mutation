@@ -210,6 +210,10 @@ mutations.push(
   ["artifact-missing-file", "cli/project.js", "const found = await searchUp(runtime, artifactsFile);", 'const found = await searchUp(runtime, artifactsFile);\n    if (found === undefined) throw new InputError("missing");', "cli", "a missing artifacts file is not an error"],
 );
 
+mutations.push(
+  ["skill-effect", "cli/help.js", "(effect: ${route.command.effect}): ", "(effect): ", "cli", "the skill lists every command path with its effect", "skill"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

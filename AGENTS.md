@@ -286,6 +286,11 @@ Good: `feat(filter): add priority option` then
   generate it. Once it exists, `mise run docs-cli` owns it and
   `mise run docs-check` rejects drift.
 
+- A change that adds, removes, or alters commands, flags, or effects
+  regenerates the agent skill (`mise run skill`) in the same change.
+  `skills/unverse/SKILL.md` holds one generated section; `mise run
+  docs-check` rejects drift.
+
 ### Product boundary
 
 - Diagnostics are read-only. Schema and transfer writes require explicit

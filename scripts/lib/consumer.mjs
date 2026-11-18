@@ -52,6 +52,13 @@ export function installConsumer(root) {
       );
       assert.ok(entry.files.some((file) => file.path === "dist/LICENSE"));
       assert.ok(entry.files.some((file) => file.path.endsWith(".js")));
+      if (metadata.name === "@unverse/cli") {
+        assert.ok(
+          entry.files.some(
+            (file) => file.path === "dist/skills/unverse/SKILL.md",
+          ),
+        );
+      }
       assert.ok(
         entry.files.every(
           (file) =>

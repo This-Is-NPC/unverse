@@ -3,3 +3,7 @@ set -eu
 
 ./node_modules/.bin/tsc --build "packages/$1/tsconfig.json" --pretty false
 cp LICENSE "packages/$1/dist/LICENSE"
+if [ "$1" = cli ]; then
+  mkdir -p packages/cli/dist/skills/unverse
+  cp skills/unverse/SKILL.md packages/cli/dist/skills/unverse/SKILL.md
+fi
