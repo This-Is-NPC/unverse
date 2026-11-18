@@ -57,7 +57,11 @@ identifiers and every permitted copied field have been reviewed and authorized.
    counted as `unchanged`; existing different rows are blocks. Add
    `--on-existing update` to the plan command to update them instead: the plan
    then lists only the differing fields, as
-   [for a seed](how-to-seed-data.md#re-run-or-update-a-seed). Unrelated target
+   [for a seed](how-to-seed-data.md#re-run-or-update-a-seed). A source
+   row whose ID is absent in the target but whose alternate key matches a target
+   row is treated as that row, and references to it are
+   [repointed](how-to-seed-data.md#match-rows-that-already-exist-under-other-ids),
+   which is why an identity map can differ from the source IDs. Unrelated target
    records are never deleted or updated. The returned report records counts, identity maps, differences,
    and a changeset-level checkpoint. `unverse verify transfer-plan.json --env
    test` re-checks the plan afterwards without writing and exits 1 while rows

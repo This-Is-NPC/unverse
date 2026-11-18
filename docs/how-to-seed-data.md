@@ -116,6 +116,52 @@ Columns the model does not describe are never read or written. The plan
 records the target values it compared; if the target changes between `plan`
 and `apply`, `apply` rejects the plan as stale and writes nothing. Plan again.
 
+## Match rows that already exist under other IDs
+
+If another seed namespace, or a person, already created the rows, their IDs
+differ from the ones this seed derives. When the model declares
+[alternate keys](design.md#14-schema-model-and-safety), the plan looks for a
+target row with the same key values before it proposes a create. Keys are tried
+in declaration order and the first hit wins. A match is handled like any
+existing row: unchanged, updated with `--on-existing update`, or blocked. Every
+reference to the seed's own ID is pointed at the matched row, so children join
+the row that exists instead of a duplicate. Excerpt of a real plan for a seed
+in namespace `new` against rows created by namespace `old`; the model keys
+`parent` by `name` and `child` by `parentid` and `name`:
+
+```json
+{
+  "create": [],
+  "update": [
+    {
+      "entity": "parent",
+      "id": "3b5d5421-9447-864f-bdbf-7313e0bfaed1",
+      "fields": { "amount": "1.00" }
+    }
+  ],
+  "unchanged": { "child": 1, "parent": 0 },
+  "matched": [
+    {
+      "entity": "parent",
+      "id": "cd18065e-0732-8dda-9ea5-e4ede74784c5",
+      "targetId": "3b5d5421-9447-864f-bdbf-7313e0bfaed1",
+      "key": "byname"
+    },
+    {
+      "entity": "child",
+      "id": "e1bf82fc-e139-8021-9c37-f0be60bed1ca",
+      "targetId": "fa1e78f7-e513-84f6-8fbd-970382d25500",
+      "key": "byparent"
+    }
+  ]
+}
+```
+
+`id` is the ID the seed derives; `targetId` is the row that exists, and the
+`update` names that row. A null value in a key column never matches. If a target
+row would match two seed rows, the second is `blocked` and the plan cannot
+apply.
+
 ## What can go wrong
 
 Apply rechecks the target identity and data fingerprint. New rows are created

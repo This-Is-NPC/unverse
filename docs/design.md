@@ -723,6 +723,21 @@ re-running a seed after a successful apply reports every row unchanged. The
 plan's observed fingerprint covers every target value it compared, so a target
 changed after planning makes `apply` reject the plan as stale.
 
+**Key matching.** When a desired row's ID is absent in the target and its
+entity declares alternate keys (model `keys`), the planner looks for a target
+row with the same key tuple: each declared key in declaration order, first hit
+wins, and a key with a null column is skipped. A match is treated as the
+existing row, so `onExisting` applies to it, and every desired reference to the
+desired ID is repointed to the target ID inside the plan, so children link to
+the row that already exists. A lookup column inside a key follows the matches
+already found, so a child keyed by its parent matches after the parent does.
+A target row that another desired row already claims (by its own ID or by an
+earlier match) blocks the later desired row instead of being matched twice. The
+plan lists every match as `matched` (`entity`, desired `id`, `targetId`, `key`);
+`apply` and `verify` recompute it from the plan's data and the current target.
+Text keys compare exactly. The target export already rejects two rows with one
+key tuple.
+
 All creates, then updates, then link updates go in one bounded multipart
 changeset. Conditional create requests use `If-None-Match: *`; update requests
 use `If-Match: *`, so an update can never create a row and a create can never
@@ -1151,7 +1166,9 @@ interface DesiredData {
 from the source. `basis` is what the plan fingerprints as the input that
 determined the rows; it defaults to the dataset fingerprint. The plan is
 bound to the `--env` target. `onExisting` selects between blocking and updating
-a differing row (§16); an identical row is reported unchanged.
+a differing row (§16); an identical row is reported unchanged. A desired row
+whose ID is absent may match a target row by alternate key (§16), and the
+plan's `matched` list reports the ID mapping.
 
 **The context.**
 

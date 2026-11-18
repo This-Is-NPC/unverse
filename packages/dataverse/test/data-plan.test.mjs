@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createManifest, seedDesired, transferDesired } from "@unverse/core";
+import {
+  createManifest,
+  seedDesired,
+  seedId,
+  transferDesired,
+} from "@unverse/core";
 import data from "../../core/test/fixtures/data.json" with { type: "json" };
+import baseModel from "../../core/test/fixtures/schema.json" with {
+  type: "json",
+};
 import { seedSpec } from "../../core/test/fixtures/seed.mjs";
 import { applyDataPlan, planDesired } from "../dist/index.js";
 import { dataFixture } from "./fixtures/data.mjs";
@@ -275,6 +283,7 @@ test("re-running an applied seed with onExisting update reports every row unchan
   assert.deepEqual(plan.update, []);
   assert.deepEqual(plan.blocked, []);
   assert.deepEqual(plan.unchanged, { parent: 1, child: 1 });
+  assert.deepEqual(plan.matched, []);
   const report = await applyDataPlan(
     fixture.client,
     plan,
@@ -370,4 +379,175 @@ test("a changeset runs creates, then updates, then link updates", async () => {
     ),
     ["create", "update", "link"],
   );
+});
+
+function keyedModel(parentKeys) {
+  const required = (names) => (column) =>
+    names.includes(column.name) ? { ...column, nullable: false } : column;
+  return {
+    ...baseModel,
+    entities: baseModel.entities.map((entity) =>
+      entity.name === "parent"
+        ? {
+            ...entity,
+            columns: entity.columns.map(required(["count"])),
+            keys: parentKeys,
+          }
+        : {
+            ...entity,
+            columns: entity.columns.map(required(["parentid"])),
+            keys: [{ name: "byparent", columns: ["parentid", "name"] }],
+          },
+    ),
+  };
+}
+
+/** A target seeded under namespace "old" and a desired seed under "new". */
+async function renamedSeed(parentKeys, change = (copy) => copy) {
+  const fixture = await dataFixture(keyedModel(parentKeys));
+  const old = await seedDesired(
+    seedSpec(fixture.model, fixture.mapping, data, "old"),
+  );
+  await applyDataPlan(
+    fixture.client,
+    await planDesired(fixture.client, old, fixture.environment),
+    fixture.environment,
+    true,
+  );
+  const desired = await seedDesired(
+    seedSpec(
+      fixture.model,
+      fixture.mapping,
+      change(structuredClone(data)),
+      "new",
+    ),
+  );
+  const ids = {
+    oldParent: await seedId("old", "parent", "row-0"),
+    oldChild: await seedId("old", "child", "row-0"),
+    newParent: await seedId("new", "parent", "row-0"),
+    newChild: await seedId("new", "child", "row-0"),
+  };
+  const plan = (onExisting) =>
+    planDesired(
+      fixture.client,
+      onExisting === undefined ? desired : { ...desired, onExisting },
+      fixture.environment,
+    );
+  return { ...fixture, ids, plan };
+}
+
+test("a row matches an existing target row by alternate key and its children follow", async () => {
+  const fixture = await renamedSeed(
+    [{ name: "byname", columns: ["name"] }],
+    (copy) => {
+      copy.parent[0].amount = "1.00";
+      return copy;
+    },
+  );
+  const plan = await fixture.plan("update");
+  const { ids } = fixture;
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.matched, [
+    {
+      entity: "parent",
+      id: ids.newParent,
+      targetId: ids.oldParent,
+      key: "byname",
+    },
+    {
+      entity: "child",
+      id: ids.newChild,
+      targetId: ids.oldChild,
+      key: "byparent",
+    },
+  ]);
+  assert.deepEqual(plan.update, [
+    { entity: "parent", id: ids.oldParent, fields: { amount: "1.00" } },
+  ]);
+  assert.deepEqual(plan.unchanged, { parent: 0, child: 1 });
+  const report = await applyDataPlan(
+    fixture.client,
+    plan,
+    fixture.environment,
+    true,
+  );
+  assert.equal(report.verified, true);
+  assert.equal(fixture.rows.get("uv_parents").length, 1);
+  assert.equal(fixture.rows.get("uv_childs").length, 1);
+  assert.equal(fixture.rows.get("uv_parents")[0].uv_amount, 1);
+  assert.match(fixture.batches[1], new RegExp(ids.oldParent));
+  assert.doesNotMatch(fixture.batches[1], new RegExp(ids.newParent));
+});
+
+test("a key-matched row that differs blocks unless onExisting is update", async () => {
+  const fixture = await renamedSeed(
+    [{ name: "byname", columns: ["name"] }],
+    (copy) => {
+      copy.parent[0].amount = "1.00";
+      return copy;
+    },
+  );
+  const plan = await fixture.plan();
+  assert.deepEqual(plan.blocked, [
+    {
+      entity: "parent",
+      id: fixture.ids.oldParent,
+      reason: "An existing row differs; set onExisting to update to change it.",
+    },
+  ]);
+  assert.deepEqual(plan.create, []);
+});
+
+test("a target row claimed by two desired rows blocks the second", async () => {
+  const fixture = await renamedSeed(
+    [
+      { name: "k1name", columns: ["name"] },
+      { name: "k2count", columns: ["count"] },
+    ],
+    (copy) => {
+      copy.parent[0].count = 5;
+      copy.parent.push({
+        ...copy.parent[0],
+        id: "00000000-0000-0000-0000-000000000199",
+        name: "Second",
+        count: 7,
+      });
+      return copy;
+    },
+  );
+  const plan = await fixture.plan("update");
+  assert.equal(
+    plan.matched.filter(({ entity }) => entity === "parent").length,
+    1,
+  );
+  assert.equal(plan.blocked.length, 1);
+  assert.match(plan.blocked[0].reason, /belongs to another desired row/);
+  await assert.rejects(
+    applyDataPlan(fixture.client, plan, fixture.environment, true),
+    /conflicting/,
+  );
+  assert.equal(fixture.batches.length, 1);
+});
+
+test("alternate keys are tried in declaration order and the first hit wins", async () => {
+  const fixture = await renamedSeed(
+    [
+      { name: "k1name", columns: ["name"] },
+      { name: "k2count", columns: ["count"] },
+    ],
+    (copy) => {
+      copy.parent[0].count = 8;
+      return copy;
+    },
+  );
+  fixture.rows.get("uv_parents").push({
+    ...fixture.rows.get("uv_parents")[0],
+    uv_parentid: "00000000-0000-0000-0000-000000000999",
+    uv_name: "Other",
+    uv_count: 8,
+  });
+  const plan = await fixture.plan("update");
+  assert.equal(plan.matched[0].key, "k1name");
+  assert.equal(plan.matched[0].targetId, fixture.ids.oldParent);
 });

@@ -231,6 +231,14 @@ mutations.push(
   ["on-existing-flag", "cli/builtins.js", 'params["on-existing"] === undefined', "true", "cli", "--on-existing selects how the built-in pipelines treat differing rows", "pipeline"],
 );
 
+mutations.push(
+  ["key-skip-repointing", "dataverse/data-match.js", ": follow(column.references, row[column.name]),", ": row[column.name],", "dataverse", "a row matches an existing target row by alternate key and its children follow", "data-plan"],
+  ["key-tuple-repointing", "dataverse/data-match.js", "follow(entity.columns.find((column) => column.name === name)?.references, row[name])", "row[name]", "dataverse", "a row matches an existing target row by alternate key and its children follow", "data-plan"],
+  ["key-differing-blocks", "dataverse/data-plan.js", 'else if (onExisting === "update") {', "else if (true) {", "dataverse", "a key-matched row that differs blocks unless onExisting is update", "data-plan"],
+  ["key-claimed", "dataverse/data-match.js", "if (claimed.has(slot(entity.name, targetId)))", "if (false)", "dataverse", "a target row claimed by two desired rows blocks the second", "data-plan"],
+  ["key-order", "dataverse/data-match.js", "for (const key of entity.keys ?? []) {", "for (const key of [...(entity.keys ?? [])].reverse()) {", "dataverse", "alternate keys are tried in declaration order and the first hit wins", "data-plan"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

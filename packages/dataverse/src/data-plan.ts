@@ -19,6 +19,7 @@ import {
   verifyTransfer,
 } from "@unverse/core";
 import { type DataverseClient, DataverseError } from "./client.js";
+import { type KeyMatch, matchByKeys } from "./data-match.js";
 import { endpoint, guid, identifier, literal, text } from "./odata.js";
 import { tables } from "./query.js";
 import { assertEnvironment } from "./schema.js";
@@ -42,6 +43,8 @@ export interface DataPlan {
     readonly fields: Readonly<Record<string, unknown>>;
   }[];
   readonly unchanged: Readonly<Record<string, number>>;
+  /** Desired rows that matched an existing target row by alternate key. */
+  readonly matched: readonly KeyMatch[];
   readonly blocked: readonly {
     readonly entity: string;
     readonly id: string;
@@ -59,15 +62,17 @@ export async function planDesired(
   const { manifest, mapping, purpose, basis, onExisting } =
     await resolveDesired(input);
   if (purpose === "transfer") assertTransferSource(manifest, environment);
-  return planData(
-    client,
-    manifest,
-    mapping,
-    environment,
-    purpose,
-    basis,
-    onExisting,
-  );
+  return (
+    await planData(
+      client,
+      manifest,
+      mapping,
+      environment,
+      purpose,
+      basis,
+      onExisting,
+    )
+  ).plan;
 }
 
 type Change = DataPlan["update"][number];
@@ -102,17 +107,24 @@ async function planData(
   purpose: "seed" | "transfer",
   policyFingerprint: string,
   onExisting: OnExisting,
-): Promise<DataPlan> {
+) {
   const target = await exportTransfer(
     client,
     manifest.model,
     mapping,
     environment,
   );
+  const { rows, matched, ambiguous } = matchByKeys(
+    manifest.model,
+    manifest.data,
+    target.data,
+  );
   const create: { entity: string; id: string }[] = [];
   const update: Change[] = [];
   const unchanged: Record<string, number> = {};
-  const blocked: { entity: string; id: string; reason: string }[] = [];
+  const blocked: { entity: string; id: string; reason: string }[] = [
+    ...ambiguous,
+  ];
   let operations = 0;
   for (const entity of manifest.model.entities) {
     const current = new Map(
@@ -122,7 +134,7 @@ async function planData(
       ]),
     );
     unchanged[entity.name] = 0;
-    for (const row of manifest.data[entity.name] ?? []) {
+    for (const row of rows[entity.name] ?? []) {
       const id = guid(String(row[entity.primaryKey]));
       const existing = current.get(id);
       const fields =
@@ -144,13 +156,15 @@ async function planData(
         operations +=
           (entity.columns.some(
             (column) =>
-              column.references === undefined && Object.hasOwn(fields, column.name),
+              column.references === undefined &&
+              Object.hasOwn(fields, column.name),
           )
             ? 1
             : 0) +
           entity.columns.filter(
             (column) =>
-              column.references !== undefined && Object.hasOwn(fields, column.name),
+              column.references !== undefined &&
+              Object.hasOwn(fields, column.name),
           ).length;
       } else
         blocked.push({
@@ -180,6 +194,7 @@ async function planData(
     create,
     update,
     unchanged,
+    matched,
     blocked,
     limitations: [
       ...lookupLimitations(manifest.model),
@@ -191,7 +206,7 @@ async function planData(
       "A field copy policy is an explicit authorization, not automatic detection of personal or sensitive data.",
     ],
   };
-  return { ...body, fingerprint: await fingerprint(body) };
+  return { plan: { ...body, fingerprint: await fingerprint(body) }, rows };
 }
 
 async function readDataPlan(
@@ -218,7 +233,7 @@ async function readDataPlan(
   const manifest = await parseManifest(value.manifest);
   if (value.purpose === "transfer") assertTransferSource(manifest, environment);
   const mapping = parseMapping(value.mapping);
-  const expected = await planData(
+  const { plan: expected, rows } = await planData(
     client,
     manifest,
     mapping,
@@ -227,7 +242,7 @@ async function readDataPlan(
     String(value.policyFingerprint),
     value.onExisting as OnExisting,
   );
-  return { manifest, mapping, expected };
+  return { manifest, mapping, expected, rows };
 }
 
 export async function verifyDataPlan(
@@ -259,7 +274,7 @@ export async function applyDataPlan(
       "invalid-input",
       "Data apply requires explicit --confirm.",
     );
-  const { manifest, mapping, expected } = await readDataPlan(
+  const { manifest, mapping, expected, rows } = await readDataPlan(
     client,
     input,
     environment,
@@ -273,6 +288,7 @@ export async function applyDataPlan(
     return verifyData(
       client,
       manifest,
+      rows,
       mapping,
       environment,
       "verified-resume",
@@ -361,7 +377,7 @@ export async function applyDataPlan(
               : `/${referenceSet(column)}(${guid(String(value))})`,
         },
       });
-    for (const row of manifest.data[entity.name] ?? []) {
+    for (const row of rows[entity.name] ?? []) {
       const id = String(row[entity.primaryKey]);
       const path = `${sets.get(entity.name)}(${guid(id)})`;
       const created = expected.create.some(
@@ -373,8 +389,15 @@ export async function applyDataPlan(
       for (const column of entity.columns) {
         if (column.name === entity.primaryKey) continue;
         const value = row[column.name];
-        if (column.references !== undefined || column.externalReference !== undefined) {
-          if (created ? value !== null : Object.hasOwn(change?.fields ?? {}, column.name))
+        if (
+          column.references !== undefined ||
+          column.externalReference !== undefined
+        ) {
+          if (
+            created
+              ? value !== null
+              : Object.hasOwn(change?.fields ?? {}, column.name)
+          )
             link(path, column, value);
         } else if (created || Object.hasOwn(change?.fields ?? {}, column.name))
           values[physicalColumn(mapping, entity, column)] = physicalValue(
@@ -388,16 +411,18 @@ export async function applyDataPlan(
     }
   }
   await client.atomicBatch([...creates, ...updates, ...links]);
-  return verifyData(client, manifest, mapping, environment, "committed");
+  return verifyData(client, manifest, rows, mapping, environment, "committed");
 }
 
 async function verifyData(
   client: DataverseClient,
-  manifest: TransferManifest,
+  desired: TransferManifest,
+  rows: Readonly<Record<string, readonly Record<string, unknown>[]>>,
   mapping: DataverseMapping,
   environment: SchemaEnvironment,
   checkpoint: string,
 ) {
+  const manifest = { ...desired, data: rows } as TransferManifest;
   const target = await exportTransfer(
     client,
     manifest.model,
