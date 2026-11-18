@@ -285,6 +285,14 @@ const incompleteGraph = {
   7: "The graph or its dependency closure is incomplete.",
 } as const;
 
+const sourceFlag: FlagSpec = {
+  name: "--source",
+  value: "source",
+  summary:
+    "Read from Dataverse tables or the Power Platform API (default dataverse).",
+  choices: ["dataverse", "platform"],
+};
+
 export const resources: readonly ResourceSpec[] = [
   {
     name: "config",
@@ -500,6 +508,7 @@ export const resources: readonly ResourceSpec[] = [
             summary: "Choose app kind (default all).",
             choices: ["all", "canvas", "model-driven"],
           },
+          sourceFlag,
         ],
         outputs: tabular,
       },
@@ -516,6 +525,7 @@ export const resources: readonly ResourceSpec[] = [
         summary:
           "Find cloud flows without exporting definitions or connection secrets.",
         flagsets: ["target", "output", "search"],
+        flags: [sourceFlag],
         outputs: tabular,
       },
     ],

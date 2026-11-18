@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { PostgresStore } from "@unverse/postgres";
 import {
   createDataverseClient,
+  createPlatformClient,
   requiredEnvironmentValue,
 } from "./node-dataverse.js";
 import { runCli } from "./run.js";
@@ -33,6 +34,11 @@ const exitCode = await runCli(process.argv.slice(2), {
     const secret = process.env[profile.clientSecretEnv];
     if (secret !== undefined) secretValues.push(secret);
     return createDataverseClient(profile, name);
+  },
+  connectPlatform: (profile, platformEnvironmentId) => {
+    const secret = process.env[profile.clientSecretEnv];
+    if (secret !== undefined) secretValues.push(secret);
+    return createPlatformClient(profile, platformEnvironmentId);
   },
   connectPostgres: (profile) => {
     const connection = requiredEnvironmentValue(profile.connectionStringEnv);

@@ -148,7 +148,11 @@ are bundled.
   External lookups are metadata-only: portable datasets must model all related
   entities instead of claiming unverified external relationship integrity.
 - App/flow inventory is limited to Dataverse-visible metadata, not all maker
-  portal resources. Solution-version comparison is not a dependency diff.
+  portal resources. `--source platform` reads the Power Platform API instead;
+  a service principal needs Power Platform admin registration and an RBAC
+  role, flow APIs work for service principals only where no license is
+  required, and that source was read in the documentation, not observed
+  running ([design §20](docs/design.md#20-power-platform-api-source)). Solution-version comparison is not a dependency diff.
   Secret or ambiguous variable values prevent a complete equality claim.
 - Dataverse seed/transfer uses bounded atomic changesets (1000 operations,
   4 MB) with re-plan-and-verify resume, not per-row checkpoints. Distinct real

@@ -32,6 +32,12 @@ export {
   variables,
 } from "./discovery.js";
 export { applyPlan, type PlanOutcome, verifyPlan } from "./plan.js";
+export {
+  PlatformClient,
+  type PlatformResource,
+  platformApps,
+  platformFlows,
+} from "./platform.js";
 export { type QueryOptions, query, type Table, tables } from "./query.js";
 export {
   resolveRole,

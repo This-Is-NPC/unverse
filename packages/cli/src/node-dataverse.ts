@@ -6,6 +6,7 @@ import {
   DataverseError,
   type HttpResponse,
   type HttpTransport,
+  PlatformClient,
   type RetryClock,
 } from "@unverse/dataverse";
 
@@ -29,6 +30,20 @@ export function createDataverseClient(
           profile: profileName,
           organizationId: profile.expectedOrganizationId,
         },
+  );
+}
+
+export function createPlatformClient(
+  profile: EnvironmentProfile,
+  platformEnvironmentId: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  transport: HttpTransport = fetchTransport,
+): PlatformClient {
+  return new PlatformClient(
+    platformEnvironmentId,
+    createCredential(profile, environment),
+    transport,
+    systemClock,
   );
 }
 

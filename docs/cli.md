@@ -210,7 +210,7 @@ Find canvas and model-driven apps without exporting their contents.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse app list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>] [--kind <all|canvas|model-driven>]`
+`unverse app list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>] [--kind <all|canvas|model-driven>] [--source <dataverse|platform>]`
 
 ### Flags
 
@@ -219,6 +219,7 @@ Find canvas and model-driven apps without exporting their contents.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 - `--kind <all|canvas|model-driven>`: Choose app kind (default all).
+- `--source <dataverse|platform>`: Read from Dataverse tables or the Power Platform API (default dataverse).
 
 ## flow list
 
@@ -227,7 +228,7 @@ Find cloud flows without exporting definitions or connection secrets.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse flow list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>]`
+`unverse flow list [--config <path>] [--env <name>] [--format <human|json|csv>] [--search <text>] [--source <dataverse|platform>]`
 
 ### Flags
 
@@ -235,6 +236,7 @@ Find cloud flows without exporting definitions or connection secrets.
 - `--env <name>`: Select a named environment profile; overrides UNVERSE_ENV, one of the two is required.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
+- `--source <dataverse|platform>`: Read from Dataverse tables or the Power Platform API (default dataverse).
 
 ## artifact types
 

@@ -11,7 +11,7 @@ const mutations = [
   ["preflight", "core/config.js", "config.configVersion !== 1", "false", "cli", "invalid profiles prevent token acquisition"],
   ["token-resource", "dataverse/client.js", "`${this.environmentUrl}/.default`", '"https://wrong.invalid/.default"', "dataverse", "requests a token for the selected environment"],
   ["auth-guard", "dataverse/client.js", 'throw new DataverseError("authentication", message(error, "Token acquisition failed."));', 'return "invalid-token";', "dataverse", "prevents API calls after authentication fails"],
-  ["payload-error", "dataverse/client.js", "object(response.body).error !== undefined", "false", "dataverse", "recognizes a permission error payload even with a successful HTTP status"],
+  ["payload-error", "dataverse/client.js", "object(response.body, service).error !== undefined", "false", "dataverse", "recognizes a permission error payload even with a successful HTTP status"],
   ["retry-budget", "dataverse/client.js", "attempt < 3", "attempt < 2", "dataverse", "retries transport failures without losing their context or leaking a token"],
   ["retry-date", "dataverse/client.js", "Math.max(0, date - now)", "0", "dataverse", "honors an HTTP date Retry-After without a real wait"],
   ["permission-exit", "core/result.js", 'case "permission":\n            return 4;', 'case "permission":\n            return 0;', "cli", "preserves permission failures from whoami"],
@@ -22,11 +22,11 @@ mutations.push(
   ["role-sources", "dataverse/roles.js", "[...(previous?.sources ?? [])]", "[]", "dataverse", "retains direct and team evidence after deduplication", "roles"],
   ["duplicate-role", "dataverse/roles.js", "matches.rows.length !== 1", "matches.rows.length === 0", "dataverse", "requires disambiguation of duplicate role names", "roles"],
   ["missing-expectation", "cli/run.js", 'assigned === false ? "failed" : "ok"', '"ok"', "cli", "failed role expectation differs from an informational empty list"],
-  ["denied-roles", "dataverse/client.js", "const failure = serviceError(response);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response);', "cli", "denied team reads cannot make a missing-role check fail"],
-  ["all-pages", "dataverse/client.js", "continuation === undefined ? undefined : this.requestUrl(continuation)", "undefined", "dataverse", "collects all requested pages", "collection"],
+  ["denied-roles", "dataverse/client.js", "const failure = serviceError(response, service);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response, service);', "cli", "denied team reads cannot make a missing-role check fail"],
+  ["all-pages", "dataverse/client.js", "continuation === undefined ? undefined : resolve(continuation)", "undefined", "dataverse", "collects all requested pages", "collection"],
   ["continuation-origin", "dataverse/client.js", "url.origin !== this.environmentUrl", "false", "dataverse", "rejects cross-origin continuation before sending a token", "collection"],
   ["query-cap", "dataverse/client.js", "rows.length === limit", "false", "dataverse", "reports capped results as incomplete", "collection"],
-  ["later-page", "dataverse/client.js", "const failure = serviceError(response);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response);', "dataverse", "does not return a complete result after a later page fails", "collection"],
+  ["later-page", "dataverse/client.js", "const failure = serviceError(response, service);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response, service);', "dataverse", "does not return a complete result after a later page fails", "collection"],
   ["literal-escaping", "dataverse/odata.js", 'value.replaceAll("\'", "\'\'")', "value", "dataverse", "escapes user filters before encoding query parameters", "roles"],
   ["metadata-search", "dataverse/query.js", "matches(search, table.logicalName, table.displayName, table.entitySet)", "true", "dataverse", "searches metadata locally without unsupported contains", "query"],
   ["inherited-profile", "core/config.js", "Object.hasOwn(config.environments, name)", "true", "core", "rejects inherited environment names"],
@@ -106,7 +106,7 @@ mutations.push(
 
 mutations.push(
   ["organization-compare", "dataverse/client.js", "identity.organizationId.toLowerCase() !== this.pin.organizationId", "false", "dataverse", "a pinned organization mismatch fails before any other read", "client"],
-  ["organization-order", "dataverse/client.js", "await this.verifyOrganization();\n        const token = await this.token();\n        const rows = [];", "const token = await this.token();\n        const rows = [];\n        await this.read(this.requestUrl(path), token);\n        await this.verifyOrganization();", "dataverse", "a pinned organization mismatch fails before any other read", "client"],
+  ["organization-order", "dataverse/client.js", "await this.verifyOrganization();\n        const token = await this.token();\n        return collectPages(", "const token = await this.token();\n        await this.read(this.requestUrl(path), token);\n        await this.verifyOrganization();\n        return collectPages(", "dataverse", "a pinned organization mismatch fails before any other read", "client"],
   ["organization-doctor", "cli/run.js", "error instanceof OrganizationMismatchError", "false", "cli", "doctor reports an organization mismatch as a failed WhoAmI after a token"],
   ["organization-malformed", "core/config.js", "!guid.test(value)", "false", "core", "accepts a canonical expected organization and rejects a malformed one"],
 );
@@ -173,6 +173,14 @@ mutations.push(
   ["discovery-walk", "cli/project.js", "if (parent === directory)", "if (true)", "cli", "discovers .unverse/config.json from a nested directory", "project"],
   ["environment-precedence", "cli/project.js", 'const flag = flags.get("--env");', 'const flag = variable(runtime, "UNVERSE_ENV") ?? flags.get("--env");', "cli", "--env beats UNVERSE_ENV and records its origin", "project"],
   ["init-overwrite", "cli/run.js", "if (exists && (await runtime.readFile(path)) !== configTemplate)", "if (false)", "cli", "init refuses to overwrite a different file", "project"],
+);
+
+mutations.push(
+  ["platform-scope", "dataverse/platform.js", "`${origin}/.default`", '"https://wrong.invalid/.default"', "dataverse", "platform reads request a token for the Power Platform scope", "platform"],
+  ["platform-paging", "dataverse/platform.js", '"nextLink",', '"missingLink",', "dataverse", "platform apps follow nextLink to the last page", "platform"],
+  ["platform-forbidden", "dataverse/client.js", "const failure = serviceError(response, service);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response, service);', "dataverse", "platform permission failures are errors, not empty lists", "platform"],
+  ["platform-id-required", "cli/run.js", "profile.platformEnvironmentId === undefined", "false", "cli", "platform source without platformEnvironmentId exits two before any connection"],
+  ["platform-forbidden-exit", "dataverse/client.js", "const failure = serviceError(response, service);", 'return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };\nconst failure = serviceError(response, service);', "cli", "platform permission failures exit four instead of listing nothing"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

@@ -127,6 +127,14 @@ path and of the environment name (`from --config`, `from UNVERSE_CONFIG`,
 Invalid or incomplete profiles fail before token acquisition or a network
 request. `config check` implements this preflight without acquiring a token.
 
+A profile may also declare `platformEnvironmentId`, a lowercase GUID. It is the
+Power Platform environment ID, not the Dataverse organization ID, and
+`config check` validates only its shape. It is read only by
+`app list --source platform` and `flow list --source platform` (§20). The same
+`ClientSecretCredential` requests a second token for the scope
+`https://api.powerplatform.com/.default`; the Dataverse token keeps its
+`<environment URL>/.default` scope, and neither token is sent to the other API.
+
 ## 7. Command surface
 
 Every command is `unverse <group> <command>` or the root command
@@ -850,3 +858,51 @@ and is not used.
 is `inconclusive`, coverage is incomplete, and the exit is 7 (§8). An error on
 any page fails the command; it never yields a partial list marked complete.
 Environment variable values are never read.
+## 20. Power Platform API source
+
+`app list` and `flow list` read Dataverse tables by default. With
+`--source platform` they read the Power Platform API instead, so that apps and
+flows that are not stored in Dataverse tables can be seen. The source is
+read-only and was **implemented from the documentation and tested offline with
+a fake transport; it has not been observed running against a real tenant.**
+
+`PlatformClient` (`@unverse/dataverse`) reuses the token, retry, `Retry-After`,
+error-mapping and paging code of `DataverseClient`; there is no second copy.
+Requests go to `https://api.powerplatform.com`, carry a bearer token for
+`https://api.powerplatform.com/.default`, and follow `nextLink` only while it
+stays on that origin. A 204 is an empty complete list. A 401 is exit 3 and a
+403 is exit 4; neither becomes an empty list. The Dataverse organization is not
+contacted, so `expectedOrganizationId` is not checked; the profile's
+`platformEnvironmentId` selects the environment and the result's evidence line
+names it. A profile without it exits 2.
+
+| Command | Request (api-version `2024-10-01`) | Fields read |
+| --- | --- | --- |
+| `app list` | `GET /powerapps/environments/{environmentId}/apps` (Apps - Get AdminApps) | `value[].name` as `id`, `value[].properties.displayName` as `name` |
+| `flow list` | `GET /powerautomate/environments/{environmentId}/cloudFlows` (Cloud Flows - List Cloud Flows) | `value[].workflowId`, `name`, and when present `uniqueName`, `stateCode` |
+
+Rows carry `source: "platform"`. A field the API does not document for a
+resource is absent: platform apps have no `kind`, `uniqueName` or `state`, so
+`--kind` is rejected with exit 2 for this source. `--search` filters locally.
+
+Limits stated by the documentation:
+
+- Service principal authentication needs the application registered with
+  Power Platform by an administrator and an RBAC role assigned to it; the API
+  accepts delegated permissions only, so a role, not an API permission, grants
+  access.
+- Flow APIs work for service principals only where no license is required,
+  because a license cannot be assigned to a service principal.
+- The List Cloud Flows page documents a 404 when the environment has no
+  Dataverse database and a page size of 250 in the SDK model. Its response
+  schema is not published on the page; JSON field names are taken from the
+  property names of the SDK `CloudFlow` model and are unverified.
+
+To verify in a real environment: that non-solution flows and apps appear; the
+JSON field casing; whether `nextLink` stays on `api.powerplatform.com`; and
+the exact failure a service principal without the role receives.
+
+Documentation used: [Apps - Get AdminApps](https://learn.microsoft.com/en-us/rest/api/power-platform/powerapps/apps/get-admin-apps),
+[Cloud Flows - List Cloud Flows](https://learn.microsoft.com/en-us/rest/api/power-platform/powerautomate/cloud-flows/list-cloud-flows),
+[Authentication](https://learn.microsoft.com/en-us/power-platform/admin/programmability-authentication-v2),
+and [Creating a service principal application using API](https://learn.microsoft.com/en-us/power-platform/admin/powerplatform-api-create-service-principal).

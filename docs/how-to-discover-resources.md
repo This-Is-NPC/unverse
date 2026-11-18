@@ -40,7 +40,29 @@ transactional snapshot or a proof that the caller can see everything.
    connections, or executable artifacts. Non-solution apps or flows not exposed
    by Dataverse are outside this inventory.
 
-3. Find a table by logical name, displayed label, or entity set:
+3. Find apps and flows that Dataverse tables do not list, with the Power
+   Platform API source. First set the profile's `platformEnvironmentId` to the
+   Power Platform environment ID (a lowercase GUID, not the Dataverse
+   organization ID; `1111aaaa-2222-3333-4444-55555555bbbb` is a placeholder),
+   register the application with Power Platform, and give it an RBAC role
+   ([design §20](design.md#20-power-platform-api-source)):
+
+   ```sh
+   unverse app list --env dev --source platform --search canvas --format json
+   unverse flow list --env dev --source platform --format json
+   ```
+
+   Against a fake transport returning the documented shapes, the first command
+   followed `nextLink` across two pages and returned
+   `{"id":"00000000-0000-0000-0000-000000000001","name":"Fixture Canvas","source":"platform"}`
+   and a second app, sorted by name, with exit 0. The flow command returned
+   `{"id":"00000000-0000-0000-0000-000000000007","name":"Synthetic Flow","source":"platform","kind":"cloud-flow","state":1}`.
+   Fields the API does not provide are absent, not guessed. **This source was
+   read in the documentation, not observed running against a real tenant;
+   whether flows and apps outside Dataverse tables appear must be verified in a
+   real environment.** `--kind` is not accepted with this source.
+
+4. Find a table by logical name, displayed label, or entity set:
 
    ```sh
    unverse table list --env dev --search accounts --format json
@@ -49,7 +71,7 @@ transactional snapshot or a proof that the caller can see everything.
    The fixture resolves `accounts` to logical table `account`. Continue with
    [table discovery](how-to-discover-tables.md) and [record reads](how-to-query-records.md).
 
-4. Resolve a user before investigating roles:
+5. Resolve a user before investigating roles:
 
    ```sh
    unverse user list --env dev --search synthetic --format json
@@ -62,6 +84,13 @@ transactional snapshot or a proof that the caller can see everything.
    the application user returned by WhoAmI, not the person running the shell.
 
 ## What can go wrong
+
+With `--source platform`, a profile without `platformEnvironmentId` exits 2
+(`--source platform requires platformEnvironmentId in the selected environment
+profile.`). A caller without a Power Platform role exits 4 (`The caller has no
+Power Platform role.` in the fake run); an invalid token exits 3. Service
+principals can read flows only where no license is required. Neither failure
+becomes an empty list.
 
 An unavailable or denied resource kind fails instead of becoming an empty
 inventory. Request one app kind if the other is outside your permissions;

@@ -82,3 +82,21 @@ test("accepts a canonical expected organization and rejects a malformed one", ()
       ConfigValidationError,
     );
 });
+
+test("accepts a lowercase platform environment ID and rejects a malformed one", () => {
+  const id = "1111aaaa-2222-3333-4444-55555555bbbb";
+  const parsed = parseConfig({
+    configVersion: 1,
+    environments: { dev: { ...profile, platformEnvironmentId: id } },
+  });
+  assert.equal(selectEnvironment(parsed, "dev").platformEnvironmentId, id);
+  for (const bad of ["not-a-guid", id.toUpperCase(), 7, ""])
+    assert.throws(
+      () =>
+        parseConfig({
+          configVersion: 1,
+          environments: { dev: { ...profile, platformEnvironmentId: bad } },
+        }),
+      /platformEnvironmentId/,
+    );
+});

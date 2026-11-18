@@ -21,6 +21,14 @@ import {
   dependencyFixture,
   referenceId,
 } from "../../dataverse/test/fixtures/dependencies.mjs";
+import {
+  appsFirstPage,
+  appsLastPage,
+  appsPath,
+  flowsPage,
+  flowsPath,
+  platformFixture,
+} from "../../dataverse/test/fixtures/platform.mjs";
 import { queryFixture } from "../../dataverse/test/fixtures/query.mjs";
 import {
   fixture,
@@ -1386,4 +1394,162 @@ test("a capped artifact list is inconclusive and exits seven", async () => {
   assert.equal(document.status, "inconclusive");
   assert.equal(document.coverage.complete, false);
   assert.equal(document.data.items.length, 1);
+});
+
+const platformId = "11111111-2222-3333-4444-555555555555";
+const platformConfig = (extra = {}) =>
+  JSON.stringify({
+    configVersion: 1,
+    environments: {
+      dev: { ...JSON.parse(validConfig).environments.dev, ...extra },
+    },
+  });
+
+async function platformList(argv, config, connectPlatform) {
+  const output = [];
+  const errors = [];
+  let platformConnections = 0;
+  const code = await runCli(argv, {
+    ...runtime(() => config, output, errors),
+    connect: () => {
+      throw new Error("Dataverse must not be contacted.");
+    },
+    connectPlatform: (profile, id) => {
+      platformConnections += 1;
+      assert.equal(id, platformId);
+      return connectPlatform(profile, id);
+    },
+  });
+  return {
+    code,
+    output,
+    errors,
+    platformConnections: () => platformConnections,
+  };
+}
+
+test("platform source lists apps and flows with a source field and no invented fields", async () => {
+  const platform = platformFixture({
+    routes: {
+      [appsPath]: [appsFirstPage, appsLastPage],
+      [flowsPath]: [flowsPage],
+    },
+  });
+  const config = platformConfig({ platformEnvironmentId: platformId });
+  const apps = await platformList(
+    ["app", "list", "--env", "dev", "--source", "platform", "--format", "json"],
+    config,
+    () => platform.client,
+  );
+  assert.equal(apps.code, 0);
+  const appDocument = JSON.parse(apps.output[0]);
+  assert.deepEqual(
+    appDocument.data.apps.map((row) => row.source),
+    ["platform", "platform"],
+  );
+  assert.ok(!("kind" in appDocument.data.apps[0]));
+  assert.ok(!("state" in appDocument.data.apps[0]));
+  assert.match(appDocument.coverage.limitations.join(" "), /RBAC role/);
+  const flows = await platformList(
+    [
+      "flow",
+      "list",
+      "--env",
+      "dev",
+      "--source",
+      "platform",
+      "--format",
+      "json",
+    ],
+    config,
+    () => platform.client,
+  );
+  assert.equal(flows.code, 0);
+  assert.equal(JSON.parse(flows.output[0]).data.flows.length, 2);
+});
+
+test("platform source without platformEnvironmentId exits two before any connection", async () => {
+  const result = await platformList(
+    [
+      "flow",
+      "list",
+      "--env",
+      "dev",
+      "--source",
+      "platform",
+      "--format",
+      "json",
+    ],
+    platformConfig(),
+    () => assert.fail("must not connect"),
+  );
+  assert.equal(result.code, 2);
+  assert.equal(result.platformConnections(), 0);
+  assert.match(
+    JSON.parse(result.output[0]).error.message,
+    /platformEnvironmentId/,
+  );
+});
+
+test("platform permission failures exit four instead of listing nothing", async () => {
+  const platform = platformFixture({
+    routes: {},
+    status: { [flowsPath]: 403 },
+  });
+  const result = await platformList(
+    [
+      "flow",
+      "list",
+      "--env",
+      "dev",
+      "--source",
+      "platform",
+      "--format",
+      "json",
+    ],
+    platformConfig({ platformEnvironmentId: platformId }),
+    () => platform.client,
+  );
+  assert.equal(result.code, 4);
+  assert.equal(JSON.parse(result.output[0]).status, "error");
+});
+
+test("the Dataverse source is the default and adds no source field", async () => {
+  for (const extra of [[], ["--source", "dataverse"]]) {
+    const output = [];
+    const code = await runCli(
+      ["flow", "list", "--env", "dev", "--format", "json", ...extra],
+      {
+        ...runtime(() => platformConfig(), output),
+        connect: () => ({
+          whoAmI: async () => ({
+            organizationId: "org",
+            applicationUserId: "app",
+            businessUnitId: "bu",
+          }),
+          collect: async () => ({
+            rows: [
+              {
+                workflowid: "00000000-0000-0000-0000-000000000006",
+                name: "Example Flow",
+                uniquename: null,
+                statecode: 1,
+              },
+            ],
+            complete: true,
+          }),
+        }),
+      },
+    );
+    assert.equal(code, 0);
+    assert.deepEqual(JSON.parse(output[0]).data.flows, [
+      {
+        id: "00000000-0000-0000-0000-000000000006",
+        name: "Example Flow",
+        uniqueName: null,
+        kind: "cloud-flow",
+        state: 1,
+      },
+    ]);
+  }
 });

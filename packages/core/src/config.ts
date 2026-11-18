@@ -4,6 +4,7 @@ export interface EnvironmentProfile {
   readonly clientIdEnv: string;
   readonly clientSecretEnv: string;
   readonly expectedOrganizationId?: string;
+  readonly platformEnvironmentId?: string;
   readonly postgres?: PostgresProfile;
 }
 
@@ -116,6 +117,14 @@ function parseProfile(value: unknown, name: string): EnvironmentProfile {
             name,
           ),
         }),
+    ...(profile.platformEnvironmentId === undefined
+      ? {}
+      : {
+          platformEnvironmentId: platformEnvironmentId(
+            profile.platformEnvironmentId,
+            name,
+          ),
+        }),
     ...(postgres === undefined
       ? {}
       : {
@@ -139,6 +148,15 @@ function organizationId(value: unknown, environment: string): string {
   if (typeof value !== "string" || !guid.test(value)) {
     throw new ConfigValidationError(
       `Environment ${JSON.stringify(environment)} field expectedOrganizationId must be a lowercase GUID.`,
+    );
+  }
+  return value;
+}
+
+function platformEnvironmentId(value: unknown, environment: string): string {
+  if (typeof value !== "string" || !guid.test(value)) {
+    throw new ConfigValidationError(
+      `Environment ${JSON.stringify(environment)} field platformEnvironmentId must be a lowercase GUID.`,
     );
   }
   return value;

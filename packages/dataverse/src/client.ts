@@ -269,45 +269,14 @@ export class DataverseClient {
     }
     await this.verifyOrganization();
     const token = await this.token();
-    const rows: Record<string, unknown>[] = [];
-    const visited = new Set<string>();
-    let next: string | undefined = this.requestUrl(path);
-    while (next !== undefined) {
-      if (visited.has(next))
-        throw new DataverseError(
-          "service",
-          "Dataverse returned a repeated continuation link.",
-        );
-      visited.add(next);
-      const response = await this.read(next, token);
-      const body = object(response.body);
-      if (!Array.isArray(body.value))
-        throw new DataverseError(
-          "service",
-          "Dataverse collection is missing value.",
-        );
-      for (const value of body.value) {
-        if (typeof value !== "object" || value === null || Array.isArray(value))
-          throw new DataverseError(
-            "service",
-            "Dataverse returned an invalid collection row.",
-          );
-        if (limit !== undefined && rows.length === limit)
-          return { rows, complete: false };
-        rows.push(value as Record<string, unknown>);
-      }
-      const continuation: unknown = body["@odata.nextLink"];
-      if (continuation !== undefined && typeof continuation !== "string")
-        throw new DataverseError(
-          "service",
-          "Dataverse returned an invalid continuation link.",
-        );
-      next =
-        continuation === undefined ? undefined : this.requestUrl(continuation);
-      if (next !== undefined && rows.length === limit)
-        return { rows, complete: false };
-    }
-    return { rows, complete: true };
+    return collectPages(
+      this.requestUrl(path),
+      (url) => this.read(url, token),
+      "@odata.nextLink",
+      (link) => this.requestUrl(link),
+      "Dataverse",
+      limit,
+    );
   }
 
   private requestUrl(path: string): string {
@@ -326,73 +295,145 @@ export class DataverseClient {
     return url.href;
   }
 
-  private async token(): Promise<string> {
-    try {
-      const token = await this.credential.getToken(
-        `${this.environmentUrl}/.default`,
-      );
-      if (token.trim() === "")
-        throw new Error("The credential returned an empty token.");
-      return token;
-    } catch (error) {
-      throw new DataverseError(
-        "authentication",
-        message(error, "Token acquisition failed."),
-      );
-    }
+  private token(): Promise<string> {
+    return acquireToken(this.credential, `${this.environmentUrl}/.default`);
   }
 
-  private async read(path: string, token: string): Promise<HttpResponse> {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      let response: HttpResponse;
-      try {
-        response = await this.transport.get(this.requestUrl(path), {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-          "OData-MaxVersion": "4.0",
-          "OData-Version": "4.0",
-          Prefer: `odata.maxpagesize=${this.pageSize}`,
-        });
-      } catch (error) {
-        if (attempt === 2) {
-          throw new DataverseError(
-            "service",
-            message(error, "Dataverse transport failed.").replaceAll(
-              token,
-              "[REDACTED]",
-            ),
-          );
-        }
-        await this.clock.wait(1_000);
+  private read(path: string, token: string): Promise<HttpResponse> {
+    return getWithRetry(
+      this.transport,
+      this.clock,
+      this.requestUrl(path),
+      {
+        Accept: "application/json",
+        "OData-MaxVersion": "4.0",
+        "OData-Version": "4.0",
+        Prefer: `odata.maxpagesize=${this.pageSize}`,
+      },
+      token,
+      "Dataverse",
+    );
+  }
+}
+
+export async function acquireToken(
+  credential: Credential,
+  scope: string,
+): Promise<string> {
+  try {
+    const token = await credential.getToken(scope);
+    if (token.trim() === "")
+      throw new Error("The credential returned an empty token.");
+    return token;
+  } catch (error) {
+    throw new DataverseError(
+      "authentication",
+      message(error, "Token acquisition failed."),
+    );
+  }
+}
+
+export async function getWithRetry(
+  transport: HttpTransport,
+  clock: RetryClock,
+  url: string,
+  headers: Readonly<Record<string, string>>,
+  token: string,
+  service: string,
+): Promise<HttpResponse> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let response: HttpResponse;
+    try {
+      response = await transport.get(url, {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      });
+    } catch (error) {
+      if (attempt === 2) {
+        throw new DataverseError(
+          "service",
+          message(error, `${service} transport failed.`).replaceAll(
+            token,
+            "[REDACTED]",
+          ),
+        );
+      }
+      await clock.wait(1_000);
+      continue;
+    }
+    if (retryable(response.status) && attempt < 2) {
+      const delay = retryAfterMilliseconds(response.headers, clock.now());
+      if (delay <= 30_000) {
+        await clock.wait(delay);
         continue;
       }
-      if (retryable(response.status) && attempt < 2) {
-        const delay = retryAfterMilliseconds(
-          response.headers,
-          this.clock.now(),
-        );
-        if (delay <= 30_000) {
-          await this.clock.wait(delay);
-          continue;
-        }
-      }
-      if (
-        response.status < 200 ||
-        response.status >= 300 ||
-        object(response.body).error !== undefined
-      ) {
-        const failure = serviceError(response);
-        throw new DataverseError(
-          failure.code,
-          failure.message.replaceAll(token, "[REDACTED]"),
-          failure.serviceCode,
-          failure.httpStatus,
-        );
-      }
-      return response;
     }
-    throw new DataverseError("service", "Dataverse retry budget exhausted.");
+    if (
+      response.status < 200 ||
+      response.status >= 300 ||
+      (response.status !== 204 &&
+        object(response.body, service).error !== undefined)
+    ) {
+      const failure = serviceError(response, service);
+      throw new DataverseError(
+        failure.code,
+        failure.message.replaceAll(token, "[REDACTED]"),
+        failure.serviceCode,
+        failure.httpStatus,
+      );
+    }
+    return response;
   }
+  throw new DataverseError("service", `${service} retry budget exhausted.`);
+}
+
+export async function collectPages(
+  start: string,
+  page: (url: string) => Promise<HttpResponse>,
+  nextLinkField: string,
+  resolve: (link: string) => string,
+  service: string,
+  limit?: number,
+): Promise<Collection> {
+  const rows: Record<string, unknown>[] = [];
+  const visited = new Set<string>();
+  let next: string | undefined = start;
+  while (next !== undefined) {
+    if (visited.has(next))
+      throw new DataverseError(
+        "service",
+        `${service} returned a repeated continuation link.`,
+      );
+    visited.add(next);
+    const response = await page(next);
+    if (response.status === 204) return { rows, complete: true };
+    const body = object(response.body, service);
+    if (!Array.isArray(body.value))
+      throw new DataverseError(
+        "service",
+        `${service} collection is missing value.`,
+      );
+    for (const value of body.value) {
+      if (typeof value !== "object" || value === null || Array.isArray(value))
+        throw new DataverseError(
+          "service",
+          `${service} returned an invalid collection row.`,
+        );
+      if (limit !== undefined && rows.length === limit)
+        return { rows, complete: false };
+      rows.push(value as Record<string, unknown>);
+    }
+    const continuation: unknown = body[nextLinkField];
+    if (continuation !== undefined && typeof continuation !== "string")
+      throw new DataverseError(
+        "service",
+        `${service} returned an invalid continuation link.`,
+      );
+    next = continuation === undefined ? undefined : resolve(continuation);
+    if (next !== undefined && rows.length === limit)
+      return { rows, complete: false };
+  }
+  return { rows, complete: true };
 }
 
 function retryable(status: number): boolean {
@@ -411,11 +452,14 @@ function retryAfterMilliseconds(
   return Number.isFinite(date) ? Math.max(0, date - now) : 1_000;
 }
 
-function serviceError(response: HttpResponse): DataverseError {
-  const detail = serviceMessage(response.body);
+function serviceError(
+  response: HttpResponse,
+  service = "Dataverse",
+): DataverseError {
+  const detail = serviceMessage(response.body, service);
   let code: string | undefined;
   try {
-    const error = object(response.body).error;
+    const error = object(response.body, service).error;
     if (typeof error === "object" && error !== null) {
       const value = (error as Record<string, unknown>).code;
       if (typeof value === "string") code = value.toLowerCase();
@@ -430,9 +474,9 @@ function serviceError(response: HttpResponse): DataverseError {
   return new DataverseError("service", detail, code, response.status);
 }
 
-function serviceMessage(body: string): string {
+function serviceMessage(body: string, service: string): string {
   try {
-    const parsed = object(body);
+    const parsed = object(body, service);
     const error = parsed.error;
     if (typeof error === "object" && error !== null) {
       const messageValue = (error as Record<string, unknown>).message;
@@ -443,22 +487,22 @@ function serviceMessage(body: string): string {
       }
     }
   } catch {
-    return "Dataverse request failed.";
+    return `${service} request failed.`;
   }
-  return "Dataverse request failed.";
+  return `${service} request failed.`;
 }
 
-function object(body: string): Record<string, unknown> {
+function object(body: string, service = "Dataverse"): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
   } catch {
-    throw new DataverseError("service", "Dataverse returned invalid JSON.");
+    throw new DataverseError("service", `${service} returned invalid JSON.`);
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new DataverseError(
       "service",
-      "Dataverse returned an invalid response body.",
+      `${service} returned an invalid response body.`,
     );
   }
   return parsed as Record<string, unknown>;

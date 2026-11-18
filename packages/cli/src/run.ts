@@ -40,8 +40,11 @@ import {
   inspectSchema,
   listArtifacts,
   OrganizationMismatchError,
+  type PlatformClient,
   planDataverseTransfer,
   planSeed,
+  platformApps,
+  platformFlows,
   query,
   resolveRole,
   solutionComponents,
@@ -77,6 +80,10 @@ export interface CliRuntime extends ProjectRuntime {
     profile: EnvironmentProfile,
     name: string,
   ) => DataverseClient;
+  readonly connectPlatform?: (
+    profile: EnvironmentProfile,
+    platformEnvironmentId: string,
+  ) => PlatformClient;
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
 }
 
@@ -278,6 +285,53 @@ export async function runCli(
       throw new InputError(
         "The plan is destructive; apply it only with --destructive.",
       );
+    if (
+      (command === "app list" || command === "flow list") &&
+      flags.get("--source") === "platform"
+    ) {
+      if (profile.platformEnvironmentId === undefined)
+        throw new InputError(
+          "--source platform requires platformEnvironmentId in the selected environment profile.",
+        );
+      if (command === "app list" && flags.has("--kind"))
+        throw new InputError(
+          "--kind is not offered by the Power Platform API; omit it with --source platform.",
+        );
+      if (runtime.connectPlatform === undefined)
+        throw new DataverseError(
+          "unsupported",
+          "Power Platform API operations are unavailable in this runtime.",
+        );
+      stage = "token and WhoAmI";
+      const platform = runtime.connectPlatform(
+        profile,
+        profile.platformEnvironmentId,
+      );
+      const search = flags.get("--search");
+      return emit(
+        {
+          ...base,
+          status: "ok",
+          data:
+            command === "app list"
+              ? { apps: await platformApps(platform, search) }
+              : { flows: await platformFlows(platform, search) },
+          evidence: [
+            `Paginated Power Platform API reads completed for platform environment ${profile.platformEnvironmentId}; the Dataverse organization was not contacted.`,
+          ],
+          coverage: {
+            complete: true,
+            limitations: [
+              "Only resources the Power Platform API returns to this caller are listed; fields it does not provide are absent.",
+              "Service principals need Power Platform admin registration and an RBAC role; flow APIs are supported for service principals only where no license is required.",
+              "Whether flows that are not stored in Dataverse appear has not been verified; this source was implemented from the documentation.",
+            ],
+          },
+        },
+        format,
+        runtime,
+      );
+    }
     stage = "token and WhoAmI";
     if (runtime.connect === undefined)
       throw new DataverseError(
