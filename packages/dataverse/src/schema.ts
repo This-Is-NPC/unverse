@@ -224,6 +224,11 @@ export async function applySchema(
         },
         headers,
       );
+      await visible(
+        client,
+        physicalEntity(mapping, entity),
+        attributes.map((attribute) => String(attribute.SchemaName)),
+      );
       for (const column of entity.columns)
         if (
           column.references !== undefined ||
@@ -241,13 +246,18 @@ export async function applySchema(
         column.externalReference !== undefined
       )
         relationships.push({ entity, column });
-      else
+      else {
+        const metadata = attributeMetadata(entity, column, mapping);
         await client.write(
           "POST",
           `EntityDefinitions(LogicalName='${physicalEntity(mapping, entity)}')/Attributes`,
-          attributeMetadata(entity, column, mapping),
+          metadata,
           headers,
         );
+        await visible(client, physicalEntity(mapping, entity), [
+          String(metadata.SchemaName),
+        ]);
+      }
     }
   }
   for (const { entity, column } of relationships) {
@@ -287,6 +297,9 @@ export async function applySchema(
       },
       headers,
     );
+    await visible(client, physicalEntity(mapping, entity), [
+      physicalColumn(mapping, entity, column),
+    ]);
   }
   return planSchema(
     model,
@@ -294,6 +307,46 @@ export async function applySchema(
     environment,
     await inspectSchema(client, mapping, model),
   );
+}
+
+const visibilityDeadline = 120_000;
+const visibilityInterval = 2_000;
+
+async function visible(
+  client: DataverseClient,
+  entity: string,
+  attributes: readonly string[],
+): Promise<void> {
+  const shown = await client.until(
+    async () => {
+      try {
+        const present = await client.collect(
+          endpoint(
+            `EntityDefinitions(LogicalName='${safeName(entity)}')/Attributes`,
+            {
+              $select: "LogicalName",
+            },
+          ),
+        );
+        return attributes.every((name) =>
+          present.rows.some((row) => row.LogicalName === name),
+        )
+          ? true
+          : undefined;
+      } catch (error) {
+        if (error instanceof DataverseError && error.httpStatus === 404)
+          return undefined;
+        throw error;
+      }
+    },
+    visibilityDeadline,
+    visibilityInterval,
+  );
+  if (shown === undefined)
+    throw new DataverseError(
+      "service",
+      `Created metadata for ${entity} is not visible after ${visibilityDeadline / 1000} seconds; inspect and create a fresh plan before retrying.`,
+    );
 }
 
 export async function assertEnvironment(

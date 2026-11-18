@@ -220,3 +220,43 @@ test("external relationships require a verified target primary key", async () =>
   );
   assert.equal(fixture.writes.length, 0);
 });
+
+const relationModel = parseModel({
+  modelVersion: 1,
+  entities: [
+    {
+      name: "child",
+      primaryKey: "id",
+      primaryName: "name",
+      columns: [
+        { name: "id", type: "uuid", nullable: false },
+        { name: "name", type: "text", nullable: false, maxLength: 50 },
+        { name: "parent", type: "uuid", nullable: true, references: "parent" },
+      ],
+    },
+    ...model.entities,
+  ],
+});
+
+test("apply waits for created metadata to be visible before dependent writes", async () => {
+  const fixture = schemaFixture({ lag: 3 });
+  const reviewed = await plan(fixture, relationModel);
+  const result = await applySchema(fixture.client, reviewed, environment, true);
+  assert.deepEqual(fixture.early, []);
+  assert.deepEqual(result.operations, []);
+  assert.ok(fixture.clock.now() > 0);
+});
+
+test("apply reports created metadata that never becomes visible", async () => {
+  const fixture = schemaFixture({ lag: Number.POSITIVE_INFINITY });
+  await assert.rejects(
+    applySchema(
+      fixture.client,
+      await plan(fixture, relationModel),
+      environment,
+      true,
+    ),
+    /not visible/,
+  );
+  assert.equal(fixture.writes.length, 1);
+});

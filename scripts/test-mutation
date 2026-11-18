@@ -111,6 +111,11 @@ mutations.push(
   ["organization-malformed", "core/config.js", "!guid.test(value)", "false", "core", "accepts a canonical expected organization and rejects a malformed one"],
 );
 
+mutations.push(
+  ["schema-visibility-wait", "dataverse/schema.js", "async function visible(client, entity, attributes) {", "async function visible(client, entity, attributes) {\nreturn;", "dataverse", "apply waits for created metadata to be visible before dependent writes", "schema"],
+  ["schema-visibility-deadline", "dataverse/schema.js", "if (shown === undefined)", "if (false)", "dataverse", "apply reports created metadata that never becomes visible", "schema"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

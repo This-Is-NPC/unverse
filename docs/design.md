@@ -324,6 +324,15 @@ rejects stale, foreign, modified, or blocked plans before writes. It creates
 entities, adds supported columns, and creates 1:N relationships only. It does
 not remove structures or retry writes. Requests are not an atomic transaction.
 
+Dataverse metadata becomes readable some time after a write. After creating an
+entity, column, or relationship, apply polls the entity's attribute list every
+two seconds until every created attribute is listed, and only then runs a step
+that depends on it. A relationship is confirmed by its lookup attribute. A
+missing entity (HTTP 404) counts as not yet visible. The deadline is 120
+seconds; when it expires apply stops with a `service` error and issues no
+further writes. The poll uses the client's injected clock, so offline tests
+advance a fake clock instead of sleeping.
+
 The opt-in command below creates and removes only an empty, randomly named
 DEV fixture namespace; the environment-file path is a placeholder:
 

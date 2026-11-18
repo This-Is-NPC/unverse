@@ -246,6 +246,20 @@ export class DataverseClient {
     }
   }
 
+  async until<T>(
+    probe: () => Promise<T | undefined>,
+    timeoutMilliseconds: number,
+    intervalMilliseconds: number,
+  ): Promise<T | undefined> {
+    const deadline = this.clock.now() + timeoutMilliseconds;
+    for (;;) {
+      const value = await probe();
+      if (value !== undefined) return value;
+      if (this.clock.now() >= deadline) return undefined;
+      await this.clock.wait(intervalMilliseconds);
+    }
+  }
+
   async collect(path: string, limit?: number): Promise<Collection> {
     if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
       throw new DataverseError(

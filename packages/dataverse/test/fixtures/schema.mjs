@@ -39,9 +39,24 @@ export const model = parseModel({
   ],
 });
 
-export function schemaFixture() {
+export function schemaFixture({ lag = 0 } = {}) {
   const entities = new Map();
   const writes = [];
+  const early = [];
+  const hidden = new Map();
+  let time = 0;
+  const clock = {
+    now: () => time,
+    wait: async (milliseconds) => {
+      time += milliseconds;
+    },
+  };
+  const hide = (object) => hidden.set(object, lag);
+  const listed = (object) => (hidden.get(object) ?? 0) === 0;
+  const age = (object) => {
+    const remaining = hidden.get(object) ?? 0;
+    if (remaining > 0) hidden.set(object, remaining - 1);
+  };
   const response = (body) => ({
     status: 200,
     headers: {},
@@ -62,11 +77,24 @@ export function schemaFixture() {
         });
       if (path === "EntityDefinitions")
         return response({
-          value: [...entities.values()].map((entity) => entity.metadata),
+          value: [...entities.values()]
+            .filter(listed)
+            .map((entity) => entity.metadata),
         });
       if (path.endsWith("/Attributes")) {
         const name = /LogicalName='([^']+)'/.exec(path)?.[1];
-        return response({ value: entities.get(name)?.columns ?? [] });
+        const entity = entities.get(name);
+        const shown = entity !== undefined && listed(entity);
+        const visibleColumns = (entity?.columns ?? []).filter(listed);
+        for (const object of [entity, ...(entity?.columns ?? [])])
+          if (object !== undefined) age(object);
+        if (!shown)
+          return {
+            status: 404,
+            headers: {},
+            body: JSON.stringify({ error: { message: "Not found." } }),
+          };
+        return response({ value: visibleColumns });
       }
       if (
         path.endsWith(
@@ -97,11 +125,22 @@ export function schemaFixture() {
       );
       const body = JSON.parse(json ?? "{}");
       writes.push({ method, path, body });
+      const target =
+        path === "RelationshipDefinitions"
+          ? [body.ReferencedEntity, body.ReferencingEntity]
+          : [/LogicalName='([^']+)'/.exec(path)?.[1]];
+      for (const name of target)
+        if (
+          name !== undefined &&
+          entities.has(name) &&
+          !listed(entities.get(name))
+        )
+          early.push({ path, name });
       if (path === "EntityDefinitions") {
         const primary = body.Attributes.find(
           (attribute) => attribute.IsPrimaryName,
         );
-        entities.set(body.SchemaName, {
+        const entity = {
           metadata: {
             LogicalName: body.SchemaName,
             MetadataId: `metadata-${entities.size}`,
@@ -116,17 +155,24 @@ export function schemaFixture() {
             },
             ...body.Attributes.map(attribute),
           ],
-        });
+        };
+        entities.set(body.SchemaName, entity);
+        hide(entity);
+        for (const column of entity.columns) hide(column);
       } else if (path === "RelationshipDefinitions") {
-        entities.get(body.ReferencingEntity).columns.push({
+        const column = {
           LogicalName: body.Lookup.SchemaName,
           AttributeType: "Lookup",
           RequiredLevel: body.Lookup.RequiredLevel,
           Targets: [body.ReferencedEntity],
-        });
+        };
+        entities.get(body.ReferencingEntity).columns.push(column);
+        hide(column);
       } else {
         const name = /LogicalName='([^']+)'/.exec(path)?.[1];
-        entities.get(name).columns.push(attribute(body));
+        const column = attribute(body);
+        entities.get(name).columns.push(column);
+        hide(column);
       }
       return { status: 204, headers: {}, body: "" };
     },
@@ -135,9 +181,9 @@ export function schemaFixture() {
     environment.url,
     { getToken: async () => "fixture-token" },
     transport,
-    { now: () => 0, wait: async () => {} },
+    clock,
   );
-  return { client, entities, writes };
+  return { client, entities, writes, early, clock };
 }
 
 function attribute(body) {

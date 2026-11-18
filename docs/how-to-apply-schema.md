@@ -34,6 +34,11 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
 
 ## What can go wrong
 
+After each creation, apply waits up to 120 seconds for the created metadata
+to be listed before it creates anything that depends on it. If it never
+appears, apply stops with exit 5 and a message naming the entity. The earlier
+writes stay in place: inspect, then create a fresh plan.
+
 Metadata apply is a sequence of requests, not an atomic transaction. Writes
 are not retried automatically. A lost response may have committed remotely:
 inspect and create a fresh plan instead of repeating an old one. Node writes
