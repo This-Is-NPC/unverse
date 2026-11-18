@@ -338,8 +338,8 @@ Apply requires explicit confirmation and an independently resolved current
 environment. It re-inspects metadata, deterministically rebuilds the plan,
 compares the whole reviewed document, checks the solution's publisher, and
 rejects stale, foreign, modified, or blocked plans before writes. It creates
-entities, adds supported columns, creates 1:N relationships, and then creates
-alternate keys only. It does not remove structures or retry writes. Requests are not an atomic transaction.
+entities, adds supported columns, adds choice options, creates 1:N
+relationships, and then creates alternate keys only. It does not remove structures or retry writes. Requests are not an atomic transaction.
 
 Dataverse metadata becomes readable some time after a write. After creating an
 entity, column, relationship, or key, apply polls every two seconds until
@@ -371,8 +371,14 @@ Multiline text has an explicit maximum length of at most 1,048,576 characters.
 Local single-select choices have explicit non-negative int32 values and English
 (LCID 1033) labels. Duplicate values/labels and unknown options are rejected.
 Inspection expands local OptionSet metadata; missing, global, multiselect, or
-otherwise unknown semantics remain incompatible. Changes to an existing option
-list are blocked rather than silently editing or dropping options.
+otherwise unknown semantics remain incompatible. An option that the model
+declares and Dataverse lacks is an additive `add-option` operation; apply
+inserts it with `InsertOptionValue`, the declared value, an English (LCID 1033)
+label, and the mapped solution. Every observed option must still match a
+declared option by both value and label, and the rest of the definition must
+be equal; otherwise the column is blocked. Label changes, value changes, and
+removals are therefore blocked rather than silently editing or dropping
+options.
 
 A UUID column may alternatively declare `externalReference: {table, primaryKey}`
 using physical logical names outside the managed prefix. Inspection and apply

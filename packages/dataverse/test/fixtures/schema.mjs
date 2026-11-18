@@ -144,7 +144,9 @@ export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
       const target =
         path === "RelationshipDefinitions"
           ? [body.ReferencedEntity, body.ReferencingEntity]
-          : [/LogicalName='([^']+)'/.exec(path)?.[1]];
+          : path === "InsertOptionValue"
+            ? [body.EntityLogicalName]
+            : [/LogicalName='([^']+)'/.exec(path)?.[1]];
       for (const name of target)
         if (
           name !== undefined &&
@@ -176,6 +178,13 @@ export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
         entities.set(body.SchemaName, entity);
         hide(entity);
         for (const column of entity.columns) hide(column);
+      } else if (path === "InsertOptionValue") {
+        const column = entities
+          .get(body.EntityLogicalName)
+          .columns.find(
+            (value) => value.LogicalName === body.AttributeLogicalName,
+          );
+        column.OptionSet.Options.push({ Value: body.Value, Label: body.Label });
       } else if (path.endsWith("/Keys")) {
         const key = {
           SchemaName: body.SchemaName,

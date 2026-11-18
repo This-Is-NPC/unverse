@@ -245,6 +245,24 @@ export async function applySchema(
           column.externalReference !== undefined
         )
           relationships.push({ entity, column });
+    } else if (operation.kind === "add-option") {
+      const column = entity.columns.find(
+        (candidate) => candidate.name === operation.column,
+      );
+      if (column === undefined)
+        throw new DataverseError("invalid-input", "Plan column is missing.");
+      await client.write(
+        "POST",
+        "InsertOptionValue",
+        {
+          EntityLogicalName: physicalEntity(mapping, entity),
+          AttributeLogicalName: physicalColumn(mapping, entity, column),
+          Value: operation.value,
+          Label: label(operation.label),
+          SolutionUniqueName: mapping.solution,
+        },
+        headers,
+      );
     } else if (operation.kind === "create-key") {
       const key = entity.keys?.find(
         (candidate) => candidate.name === operation.key,

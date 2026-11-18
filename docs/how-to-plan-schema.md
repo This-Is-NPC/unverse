@@ -55,6 +55,20 @@ supported types and a 1:N relationship. See
    in `blocked`. Keys are never changed or deleted. A key that exists but whose
    index is not yet `Active` is in `unverified`.
 
+4. To extend a local choice, add the new option to its `options` list. Against
+   the synthetic fixture whose `status` choice had `Open` (1) and `Closed` (2),
+   adding `Archived` (3) produced one additive operation and no blocks:
+
+   ```json
+   "operations": [
+     { "kind": "add-option", "entity": "parent", "column": "status", "value": 3, "label": "Archived" }
+   ]
+   ```
+
+   Relabelling `Closed` to `Done` instead left `operations` empty and put the
+   column in `blocked`: every existing option must keep its value and label,
+   so label changes, value changes, and removals are blocked.
+
 ## What can go wrong
 
 Planning is informational: exit 0 does not mean every listed change can be

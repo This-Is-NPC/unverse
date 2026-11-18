@@ -123,6 +123,10 @@ mutations.push(
   ["key-visibility", "dataverse/schema.js", "await awaitVisible(client, schemaName, listing);", "", "dataverse", "apply reports a created key that never becomes visible", "schema"],
   ["key-index-wait", "dataverse/schema.js", 'status === "Active" || status === "Failed"', "true", "dataverse", "alternate keys are created after their columns and wait for an active index", "schema"],
   ["postgres-key-verify", "postgres/index.js", "if (!uniques.rows.some(", "if (false && !uniques.rows.some(", "postgres", "PostgreSQL enforces alternate keys and verification detects a removed key", "postgres"],
+  ["option-label", "core/plan.js", "wanted.value === option.value && wanted.label === option.label", "wanted.value === option.value", "dataverse", "choice label changes, value changes, and removals stay blocked", "schema"],
+  ["option-removal", "core/plan.js", "have.some((option) => !want.some(", "false && have.some((option) => !want.some(", "dataverse", "choice label changes, value changes, and removals stay blocked", "schema"],
+  ["option-addition", "core/plan.js", "return want.filter((wanted) => !have.some(", "return [].filter((wanted) => !have.some(", "dataverse", "choice options absent in Dataverse are added to the solution", "schema"],
+  ["option-solution", "dataverse/schema.js", "SolutionUniqueName: mapping.solution,", 'SolutionUniqueName: "Other",', "dataverse", "choice options absent in Dataverse are added to the solution", "schema"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

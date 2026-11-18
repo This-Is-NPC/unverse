@@ -181,8 +181,9 @@ test("schema provisions local choices and multiline without losing options", asy
   assert.deepEqual(result.blocked, []);
   fixture.entities
     .get("uv_parent")
-    .columns.find((column) => column.LogicalName === "uv_status")
-    .OptionSet.Options.pop();
+    .columns.find(
+      (column) => column.LogicalName === "uv_status",
+    ).OptionSet.Options[0].Label.LocalizedLabels[0].Label = "Changed";
   assert.ok(
     (await plan(fixture, extended)).blocked.some(
       (entry) => entry.path === "parent.status",
@@ -380,4 +381,84 @@ test("apply reports a created key that never becomes visible", async () => {
     ),
     /not visible/,
   );
+});
+
+const statusModel = (options) =>
+  parseModel({
+    ...model,
+    entities: model.entities.map((entity) => ({
+      ...entity,
+      columns: [
+        ...entity.columns,
+        { name: "status", type: "choice", nullable: true, options },
+      ],
+    })),
+  });
+const open = { value: 1, label: "Open" };
+const closed = { value: 2, label: "Closed" };
+
+test("choice options absent in Dataverse are added to the solution", async () => {
+  const fixture = schemaFixture();
+  await applySchema(
+    fixture.client,
+    await plan(fixture, statusModel([open, closed])),
+    environment,
+    true,
+  );
+  const archived = { value: 7, label: "Archived" };
+  const reviewed = await plan(fixture, statusModel([open, closed, archived]));
+  assert.deepEqual(reviewed.blocked, []);
+  assert.deepEqual(reviewed.operations, [
+    {
+      kind: "add-option",
+      entity: "parent",
+      column: "status",
+      value: 7,
+      label: "Archived",
+    },
+  ]);
+  fixture.writes.length = 0;
+  const result = await applySchema(fixture.client, reviewed, environment, true);
+  assert.deepEqual(result.operations, []);
+  assert.deepEqual(result.blocked, []);
+  assert.equal(fixture.writes.length, 1);
+  assert.equal(fixture.writes[0].path, "InsertOptionValue");
+  assert.deepEqual(fixture.writes[0].body, {
+    EntityLogicalName: "uv_parent",
+    AttributeLogicalName: "uv_status",
+    Value: 7,
+    Label: { LocalizedLabels: [{ Label: "Archived", LanguageCode: 1033 }] },
+    SolutionUniqueName: "UnverseFixture",
+  });
+  assert.equal(
+    fixture.writes[0].headers["MSCRM.SolutionUniqueName"],
+    "UnverseFixture",
+  );
+});
+
+test("choice label changes, value changes, and removals stay blocked", async () => {
+  const fixture = schemaFixture();
+  await applySchema(
+    fixture.client,
+    await plan(fixture, statusModel([open, closed])),
+    environment,
+    true,
+  );
+  for (const options of [
+    [open, { value: 2, label: "Done" }],
+    [open, { value: 5, label: "Closed" }],
+    [open],
+    [open, { value: 3, label: "Closed" }, { value: 2, label: "Done" }],
+    [
+      { value: 1, label: "Closed" },
+      { value: 2, label: "Open" },
+    ],
+  ]) {
+    const blocked = await plan(fixture, statusModel(options));
+    assert.ok(
+      blocked.blocked.some((entry) => entry.path === "parent.status"),
+      JSON.stringify(options),
+    );
+    assert.deepEqual(blocked.operations, []);
+  }
 });

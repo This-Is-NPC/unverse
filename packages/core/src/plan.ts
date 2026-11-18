@@ -53,6 +53,13 @@ export type SchemaOperation =
       readonly column: string;
     }
   | {
+      readonly kind: "add-option";
+      readonly entity: string;
+      readonly column: string;
+      readonly value: number;
+      readonly label: string;
+    }
+  | {
       readonly kind: "create-key";
       readonly entity: string;
       readonly key: string;
@@ -144,14 +151,23 @@ export async function planSchema(
           });
       } else if (observed !== undefined) {
         const { name: _name, ...definition } = column;
-        if (
-          observed.definition === null ||
-          canonical(observed.definition) !== canonical(definition)
-        )
+        const additions =
+          observed.definition === null
+            ? null
+            : optionAdditions(observed.definition, definition);
+        if (additions === null)
           blocked.push({
             path,
             reason: `Existing definition differs or has unknown semantics (${observed.providerType}); type and constraint changes are blocked.`,
           });
+        else
+          for (const option of additions)
+            operations.push({
+              kind: "add-option",
+              entity: entity.name,
+              column: column.name,
+              ...option,
+            });
       }
     }
     for (const column of existing?.columns ?? []) {
@@ -264,4 +280,28 @@ function columnCapability(entity: Entity, column: Column): string | null {
 
 function sameColumns(a: readonly string[], b: readonly string[]): boolean {
   return canonical([...a].sort()) === canonical([...b].sort());
+}
+
+type Definition = Omit<Column, "name">;
+
+function optionAdditions(
+  observed: Definition,
+  declared: Definition,
+): NonNullable<Column["options"]> | null {
+  const { options: have = [], ...observedRest } = observed;
+  const { options: want = [], ...declaredRest } = declared;
+  if (
+    canonical(observedRest) !== canonical(declaredRest) ||
+    have.some(
+      (option) =>
+        !want.some(
+          (wanted) =>
+            wanted.value === option.value && wanted.label === option.label,
+        ),
+    )
+  )
+    return null;
+  return want.filter(
+    (wanted) => !have.some((option) => option.value === wanted.value),
+  );
 }
