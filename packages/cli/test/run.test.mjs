@@ -6,7 +6,7 @@ import {
   preservedIdentities,
   verifyTransfer,
 } from "@unverse/core";
-import { DataverseError } from "@unverse/dataverse";
+import { DataverseClient, DataverseError } from "@unverse/dataverse";
 import transferData from "../../core/test/fixtures/data.json" with {
   type: "json",
 };
@@ -534,4 +534,192 @@ test("CLI partial dependency graphs exit seven and show coverage warnings", asyn
     7,
   );
   assert.ok(output[0].includes("closure complete: false"));
+});
+
+const pinnedOrganization = "11111111-2222-3333-4444-555555555555";
+const otherOrganization = "99999999-2222-3333-4444-555555555555";
+
+function pinnedConfig(devPin, testPin) {
+  const profile = (host, pin) => ({
+    url: `https://${host}.crm.dynamics.com`,
+    tenantIdEnv: "UNVERSE_TENANT_ID",
+    clientIdEnv: "UNVERSE_CLIENT_ID",
+    clientSecretEnv: "UNVERSE_CLIENT_SECRET",
+    ...(pin === undefined ? {} : { expectedOrganizationId: pin }),
+  });
+  return JSON.stringify({
+    configVersion: 1,
+    environments: {
+      dev: profile("dev", devPin),
+      test: profile("test", testPin),
+    },
+  });
+}
+
+function pinnedRuntime(config, organizations, requests, output = []) {
+  return {
+    ...runtime(() => config, output),
+    connect: (profile, name) =>
+      new DataverseClient(
+        profile.url,
+        { getToken: async () => "token" },
+        {
+          get: async (url) => {
+            const { host, pathname } = new URL(url);
+            requests.push(`${host}${pathname.replace("/api/data/v9.2", "")}`);
+            return {
+              status: 200,
+              headers: {},
+              body: JSON.stringify(
+                pathname.endsWith("/WhoAmI")
+                  ? {
+                      OrganizationId: organizations[name],
+                      UserId: "app",
+                      BusinessUnitId: "unit",
+                    }
+                  : { value: [] },
+              ),
+            };
+          },
+        },
+        { wait: async () => {}, now: () => 0 },
+        5000,
+        profile.expectedOrganizationId === undefined
+          ? undefined
+          : { profile: name, organizationId: profile.expectedOrganizationId },
+      ),
+  };
+}
+
+test("config validate rejects a malformed expected organization without contacting Dataverse", async () => {
+  const requests = [];
+  const output = [];
+  const result = await runCli(
+    ["config", "validate", "--env", "dev", "--json"],
+    pinnedRuntime(pinnedConfig("not-a-guid"), {}, requests, output),
+  );
+  assert.equal(result, 2);
+  assert.deepEqual(requests, []);
+  assert.match(JSON.parse(output[0]).error.message, /expectedOrganizationId/);
+});
+
+test("whoami and doctor report a matching expected organization as evidence", async () => {
+  for (const command of ["whoami", "doctor"]) {
+    const requests = [];
+    const output = [];
+    const result = await runCli(
+      [command, "--env", "dev", "--json"],
+      pinnedRuntime(
+        pinnedConfig(pinnedOrganization),
+        { dev: pinnedOrganization },
+        requests,
+        output,
+      ),
+    );
+    assert.equal(result, 0);
+    assert.deepEqual(requests, ["dev.crm.dynamics.com/WhoAmI"]);
+    assert.ok(
+      JSON.parse(output[0]).evidence.some((line) =>
+        line.includes(`matches expectedOrganizationId ${pinnedOrganization}`),
+      ),
+    );
+  }
+});
+
+test("a profile without an expected organization adds no match evidence", async () => {
+  const output = [];
+  await runCli(
+    ["whoami", "--env", "dev", "--json"],
+    pinnedRuntime(pinnedConfig(), { dev: otherOrganization }, [], output),
+  );
+  assert.deepEqual(JSON.parse(output[0]).evidence, [
+    "Dataverse WhoAmI completed.",
+  ]);
+});
+
+test("an organization mismatch exits two after WhoAmI and before any other request", async () => {
+  const requests = [];
+  const output = [];
+  const result = await runCli(
+    ["tables", "list", "--env", "dev", "--json"],
+    pinnedRuntime(
+      pinnedConfig(pinnedOrganization),
+      { dev: otherOrganization },
+      requests,
+      output,
+    ),
+  );
+  assert.equal(result, 2);
+  assert.deepEqual(requests, ["dev.crm.dynamics.com/WhoAmI"]);
+  const { error } = JSON.parse(output[0]);
+  assert.equal(error.code, "invalid-input");
+  assert.ok(error.message.includes('"dev"'));
+  assert.ok(error.message.includes(pinnedOrganization));
+  assert.ok(error.message.includes(otherOrganization));
+});
+
+test("doctor reports an organization mismatch as a failed WhoAmI after a token", async () => {
+  const output = [];
+  const result = await runCli(
+    ["doctor", "--env", "dev", "--json"],
+    pinnedRuntime(
+      pinnedConfig(pinnedOrganization),
+      { dev: otherOrganization },
+      [],
+      output,
+    ),
+  );
+  assert.equal(result, 2);
+  assert.deepEqual(
+    JSON.parse(output[0]).data.checks.map((check) => [
+      check.name,
+      check.status,
+    ]),
+    [
+      ["configuration", "ok"],
+      ["token", "ok"],
+      ["WhoAmI", "error"],
+    ],
+  );
+});
+
+test("environment compare checks the source and the target profile", async () => {
+  const compare = [
+    "environment",
+    "compare",
+    "--env",
+    "dev",
+    "--target-env",
+    "test",
+    "--json",
+  ];
+  const sourceRequests = [];
+  assert.equal(
+    await runCli(
+      compare,
+      pinnedRuntime(
+        pinnedConfig(pinnedOrganization, pinnedOrganization),
+        { dev: otherOrganization, test: pinnedOrganization },
+        sourceRequests,
+      ),
+    ),
+    2,
+  );
+  assert.deepEqual(sourceRequests, ["dev.crm.dynamics.com/WhoAmI"]);
+  const targetRequests = [];
+  assert.equal(
+    await runCli(
+      compare,
+      pinnedRuntime(
+        pinnedConfig(pinnedOrganization, pinnedOrganization),
+        { dev: pinnedOrganization, test: otherOrganization },
+        targetRequests,
+      ),
+    ),
+    2,
+  );
+  assert.deepEqual(targetRequests, [
+    "dev.crm.dynamics.com/WhoAmI",
+    "test.crm.dynamics.com/WhoAmI",
+  ]);
 });

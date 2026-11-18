@@ -34,6 +34,11 @@ export interface WhoAmI {
   readonly businessUnitId: string;
 }
 
+export interface OrganizationPin {
+  readonly profile: string;
+  readonly organizationId: string;
+}
+
 export interface Collection {
   readonly rows: readonly Record<string, unknown>[];
   readonly complete: boolean;
@@ -51,7 +56,16 @@ export class DataverseError extends Error {
   }
 }
 
+export class OrganizationMismatchError extends DataverseError {
+  constructor(message: string) {
+    super("invalid-input", message);
+    this.name = "OrganizationMismatchError";
+  }
+}
+
 export class DataverseClient {
+  private identity: Promise<WhoAmI> | undefined;
+
   get url(): string {
     return this.environmentUrl;
   }
@@ -61,6 +75,7 @@ export class DataverseClient {
     private readonly transport: HttpTransport,
     private readonly clock: RetryClock,
     private readonly pageSize = 5000,
+    private readonly pin?: OrganizationPin,
   ) {
     if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 5000)
       throw new DataverseError(
@@ -69,15 +84,32 @@ export class DataverseClient {
       );
   }
 
-  async whoAmI(): Promise<WhoAmI> {
+  whoAmI(): Promise<WhoAmI> {
+    this.identity ??= this.fetchIdentity();
+    return this.identity;
+  }
+
+  private async fetchIdentity(): Promise<WhoAmI> {
     const token = await this.token();
     const response = await this.read("WhoAmI", token);
     const body = object(response.body);
-    return {
+    const identity = {
       organizationId: requiredString(body.OrganizationId, "OrganizationId"),
       applicationUserId: requiredString(body.UserId, "UserId"),
       businessUnitId: requiredString(body.BusinessUnitId, "BusinessUnitId"),
     };
+    if (
+      this.pin !== undefined &&
+      identity.organizationId.toLowerCase() !== this.pin.organizationId
+    )
+      throw new OrganizationMismatchError(
+        `Environment ${JSON.stringify(this.pin.profile)} expects organization ${this.pin.organizationId} but ${this.environmentUrl} is organization ${identity.organizationId}.`,
+      );
+    return identity;
+  }
+
+  private async verifyOrganization(): Promise<void> {
+    if (this.pin !== undefined) await this.whoAmI();
   }
 
   async write(
@@ -175,6 +207,7 @@ export class DataverseClient {
         "unsupported",
         "This transport does not support writes.",
       );
+    await this.verifyOrganization();
     const token = await this.token();
     try {
       const response = await this.transport.request(
@@ -220,6 +253,7 @@ export class DataverseClient {
         "The row limit must be a positive safe integer.",
       );
     }
+    await this.verifyOrganization();
     const token = await this.token();
     const rows: Record<string, unknown>[] = [];
     const visited = new Set<string>();

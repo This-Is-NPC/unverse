@@ -17,10 +17,10 @@ const exitCode = await runCli(process.argv.slice(2), {
   writeOut: (line) => process.stdout.write(line),
   writeError: (line) => process.stderr.write(line),
   secrets: secretValues,
-  connect: (profile) => {
+  connect: (profile, name) => {
     const secret = process.env[profile.clientSecretEnv];
     if (secret !== undefined) secretValues.push(secret);
-    return createDataverseClient(profile);
+    return createDataverseClient(profile, name);
   },
   connectPostgres: (profile) => {
     const connection = requiredEnvironmentValue(profile.connectionStringEnv);

@@ -66,9 +66,46 @@ probe, not for validating table or record permissions.
    A successful probe proves only that the selected application user can
    complete WhoAmI; it does not establish privileges for other commands.
 
+5. Pin the profile to its organization, so a swapped or edited
+   configuration cannot reach another environment. Read `organizationId` from
+   the `whoami` output (the IDs below are synthetic):
+
+   ```json
+   "data": {
+     "organizationId": "0a1b2c3d-1111-4222-8333-444455556666",
+     "applicationUserId": "00000000-0000-4000-8000-000000000001",
+     "businessUnitId": "00000000-0000-4000-8000-000000000002"
+   }
+   ```
+
+   Copy that value, in lowercase, into the profile as
+   `"expectedOrganizationId": "0a1b2c3d-1111-4222-8333-444455556666"`.
+   `config validate` rejects a value that is not a lowercase GUID, without
+   contacting Dataverse. From then on every command that contacts the
+   environment first checks that WhoAmI returns this organization, and
+   `whoami` and `doctor` add the match to `evidence`:
+
+   ```text
+   Organization 0a1b2c3d-1111-4222-8333-444455556666 matches expectedOrganizationId 0a1b2c3d-1111-4222-8333-444455556666.
+   ```
+
+   A different organization fails with exit 2 and no other request is sent
+   (output from the built CLI against a synthetic transport):
+
+   ```json
+   "error": {
+     "code": "invalid-input",
+     "message": "Environment \"dev\" expects organization ffffffff-1111-4222-8333-444455556666 but https://example-dev.crm.dynamics.com is organization 0a1b2c3d-1111-4222-8333-444455556666."
+   }
+   ```
+
+   Commands that use two profiles check each profile that sets the field.
+   The field is optional; profiles without it are not checked.
+
 ## What can go wrong
 
-Invalid profiles exit 2, authentication failures exit 3, denied requests exit
+Invalid profiles and an organization that differs from
+`expectedOrganizationId` exit 2, authentication failures exit 3, denied requests exit
 4, and service or exhausted transport failures exit 5. Inspect `error.code`
 and `coverage` in JSON. A failed doctor probe marks later checks as not run
 or unknown, rather than successful. No table, role, or record privilege is

@@ -35,6 +35,7 @@ import {
   exportTransfer,
   flows,
   inspectSchema,
+  OrganizationMismatchError,
   planDataverseTransfer,
   planSeed,
   query,
@@ -64,7 +65,10 @@ export interface CliRuntime {
   readonly writeOut: (line: string) => void;
   readonly writeError: (line: string) => void;
   readonly secrets: readonly string[];
-  readonly connect?: (profile: EnvironmentProfile) => DataverseClient;
+  readonly connect?: (
+    profile: EnvironmentProfile,
+    name: string,
+  ) => DataverseClient;
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
 }
 
@@ -223,7 +227,7 @@ export async function runCli(
         "unsupported",
         "Dataverse operations are unavailable in this runtime.",
       );
-    const client = runtime.connect(profile);
+    const client = runtime.connect(profile, parsed.environmentName);
     if (
       ["seed apply", "transfer apply"].includes(parsed.command) &&
       !parsed.options.has("--confirm")
@@ -473,7 +477,7 @@ export async function runCli(
           throw new InputError(
             "Comparison requires distinct environment URLs.",
           );
-        const target = runtime.connect(targetProfile);
+        const target = runtime.connect(targetProfile, targetName);
         const targetIdentity = await target.whoAmI();
         const comparison = await compareEnvironments(
           client,
@@ -730,7 +734,14 @@ export async function runCli(
                 identity,
               }
             : identity,
-        evidence: ["Dataverse WhoAmI completed."],
+        evidence: [
+          "Dataverse WhoAmI completed.",
+          ...(profile.expectedOrganizationId === undefined
+            ? []
+            : [
+                `Organization ${identity.organizationId} matches expectedOrganizationId ${profile.expectedOrganizationId}.`,
+              ]),
+        ],
         coverage: {
           complete: true,
           limitations: [
@@ -773,20 +784,24 @@ export async function runCli(
                     status:
                       stage === "configuration"
                         ? "not-run"
-                        : code === "authentication"
-                          ? "error"
-                          : code === "invalid-input"
-                            ? "not-run"
-                            : "unknown",
+                        : error instanceof OrganizationMismatchError
+                          ? "ok"
+                          : code === "authentication"
+                            ? "error"
+                            : code === "invalid-input"
+                              ? "not-run"
+                              : "unknown",
                   },
                   {
                     name: "WhoAmI",
                     status:
-                      stage === "configuration" ||
-                      code === "authentication" ||
-                      code === "invalid-input"
-                        ? "not-run"
-                        : "error",
+                      error instanceof OrganizationMismatchError
+                        ? "error"
+                        : stage === "configuration" ||
+                            code === "authentication" ||
+                            code === "invalid-input"
+                          ? "not-run"
+                          : "error",
                   },
                 ],
               },

@@ -64,3 +64,21 @@ test("rejects inherited environment names", () => {
     ConfigValidationError,
   );
 });
+
+test("accepts a canonical expected organization and rejects a malformed one", () => {
+  const id = "aaaaaaaa-2222-3333-4444-55555555555b";
+  const parsed = parseConfig({
+    configVersion: 1,
+    environments: { dev: { ...profile, expectedOrganizationId: id } },
+  });
+  assert.equal(selectEnvironment(parsed, "dev").expectedOrganizationId, id);
+  for (const bad of ["", "not-a-guid", id.toUpperCase(), `{${id}}`, 7])
+    assert.throws(
+      () =>
+        parseConfig({
+          configVersion: 1,
+          environments: { dev: { ...profile, expectedOrganizationId: bad } },
+        }),
+      ConfigValidationError,
+    );
+});

@@ -164,3 +164,97 @@ test("requests the configured OData page size", async () => {
   await client.whoAmI();
   assert.equal(requests[0].Prefer, "odata.maxpagesize=1");
 });
+
+const pinnedId = "aaaaaaaa-2222-3333-4444-55555555555b";
+const otherId = "99999999-2222-3333-4444-555555555555";
+
+function pinnedClient(organizationId, requests) {
+  return new DataverseClient(
+    "https://dev.crm.dynamics.com",
+    { getToken: async () => "token" },
+    {
+      get: async (url) => {
+        requests.push(`GET ${new URL(url).pathname}`);
+        return response(
+          200,
+          url.endsWith("/WhoAmI")
+            ? JSON.stringify({
+                OrganizationId: organizationId,
+                UserId: "app",
+                BusinessUnitId: "unit",
+              })
+            : JSON.stringify({ value: [] }),
+        );
+      },
+      request: async (method, url) => {
+        requests.push(`${method} ${new URL(url).pathname}`);
+        return response(204, "");
+      },
+    },
+    { wait: async () => {}, now: () => 0 },
+    5000,
+    { profile: "dev", organizationId: pinnedId },
+  );
+}
+
+test("a pinned organization that matches lets requests proceed", async () => {
+  const requests = [];
+  const client = pinnedClient(pinnedId.toUpperCase(), requests);
+  await client.collect("accounts");
+  assert.deepEqual(requests, [
+    "GET /api/data/v9.2/WhoAmI",
+    "GET /api/data/v9.2/accounts",
+  ]);
+});
+
+test("a pinned organization mismatch fails before any other read", async () => {
+  const requests = [];
+  const client = pinnedClient(otherId, requests);
+  await assert.rejects(
+    client.collect("accounts"),
+    (error) =>
+      error.code === "invalid-input" &&
+      error.message.includes('"dev"') &&
+      error.message.includes(pinnedId) &&
+      error.message.includes(otherId),
+  );
+  await assert.rejects(client.collect("accounts"), DataverseError);
+  assert.deepEqual(requests, ["GET /api/data/v9.2/WhoAmI"]);
+});
+
+test("a pinned organization mismatch fails before any write", async () => {
+  const requests = [];
+  const client = pinnedClient(otherId, requests);
+  await assert.rejects(
+    client.write("POST", "accounts", { name: "x" }),
+    (error) => error.code === "invalid-input",
+  );
+  assert.deepEqual(requests, ["GET /api/data/v9.2/WhoAmI"]);
+});
+
+test("a pinned client asks WhoAmI once however often it is used", async () => {
+  const requests = [];
+  const client = pinnedClient(pinnedId, requests);
+  await client.whoAmI();
+  await client.collect("accounts");
+  await client.write("POST", "accounts", {});
+  await client.whoAmI();
+  assert.equal(requests.filter((entry) => entry.endsWith("/WhoAmI")).length, 1);
+});
+
+test("an unpinned client sends no WhoAmI before other requests", async () => {
+  const requests = [];
+  const client = new DataverseClient(
+    "https://dev.crm.dynamics.com",
+    { getToken: async () => "token" },
+    {
+      get: async (url) => {
+        requests.push(new URL(url).pathname);
+        return response(200, JSON.stringify({ value: [] }));
+      },
+    },
+    { wait: async () => {}, now: () => 0 },
+  );
+  await client.collect("accounts");
+  assert.deepEqual(requests, ["/api/data/v9.2/accounts"]);
+});

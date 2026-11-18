@@ -4,6 +4,8 @@ export {
   DataverseError,
   type HttpResponse,
   type HttpTransport,
+  OrganizationMismatchError,
+  type OrganizationPin,
   type RetryClock,
   type WhoAmI,
 } from "./client.js";

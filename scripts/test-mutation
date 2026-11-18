@@ -100,6 +100,13 @@ mutations.push(
   ["graph-label-identity", "dataverse/dependencies.js", "guid(text(row, key)) !== node.objectId", "false", "dataverse", "unrelated label metadata cannot invent a connection binding", "dependencies"],
 );
 
+mutations.push(
+  ["organization-compare", "dataverse/client.js", "identity.organizationId.toLowerCase() !== this.pin.organizationId", "false", "dataverse", "a pinned organization mismatch fails before any other read", "client"],
+  ["organization-order", "dataverse/client.js", "await this.verifyOrganization();\n        const token = await this.token();\n        const rows = [];", "const token = await this.token();\n        const rows = [];\n        await this.read(this.requestUrl(path), token);\n        await this.verifyOrganization();", "dataverse", "a pinned organization mismatch fails before any other read", "client"],
+  ["organization-doctor", "cli/run.js", "error instanceof OrganizationMismatchError", "false", "cli", "doctor reports an organization mismatch as a failed WhoAmI after a token"],
+  ["organization-malformed", "core/config.js", "!guid.test(value)", "false", "core", "accepts a canonical expected organization and rejects a malformed one"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

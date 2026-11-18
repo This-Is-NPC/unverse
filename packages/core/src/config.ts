@@ -3,6 +3,7 @@ export interface EnvironmentProfile {
   readonly tenantIdEnv: string;
   readonly clientIdEnv: string;
   readonly clientSecretEnv: string;
+  readonly expectedOrganizationId?: string;
   readonly postgres?: PostgresProfile;
 }
 
@@ -107,6 +108,14 @@ function parseProfile(value: unknown, name: string): EnvironmentProfile {
       name,
       "clientSecretEnv",
     ),
+    ...(profile.expectedOrganizationId === undefined
+      ? {}
+      : {
+          expectedOrganizationId: organizationId(
+            profile.expectedOrganizationId,
+            name,
+          ),
+        }),
     ...(postgres === undefined
       ? {}
       : {
@@ -124,6 +133,15 @@ function parseProfile(value: unknown, name: string): EnvironmentProfile {
           },
         }),
   };
+}
+
+function organizationId(value: unknown, environment: string): string {
+  if (typeof value !== "string" || !guid.test(value)) {
+    throw new ConfigValidationError(
+      `Environment ${JSON.stringify(environment)} field expectedOrganizationId must be a lowercase GUID.`,
+    );
+  }
+  return value;
 }
 
 function normalizeUrl(value: string): string {
@@ -182,3 +200,4 @@ function environmentReference(
 
 const environmentName = /^[a-z][a-z0-9-]*$/;
 const environmentVariable = /^[A-Z_][A-Z0-9_]*$/;
+const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

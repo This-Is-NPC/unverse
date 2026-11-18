@@ -11,6 +11,7 @@ import {
 
 export function createDataverseClient(
   profile: EnvironmentProfile,
+  profileName: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   pageSize = 5000,
   transport: HttpTransport = fetchTransport,
@@ -22,6 +23,12 @@ export function createDataverseClient(
     transport,
     systemClock,
     pageSize,
+    profile.expectedOrganizationId === undefined
+      ? undefined
+      : {
+          profile: profileName,
+          organizationId: profile.expectedOrganizationId,
+        },
   );
 }
 

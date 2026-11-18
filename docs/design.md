@@ -95,6 +95,13 @@ registration, matching Dataverse application user, and sufficient security
 roles are prerequisites in every selected environment. Delegated credentials,
 certificates, and managed identity are future extensions.
 
+A profile may declare `expectedOrganizationId`, a lowercase GUID. The
+Dataverse client then compares it with the `OrganizationId` returned by
+WhoAmI before its first read or write, reuses that one WhoAmI result for the
+rest of the run, and fails with exit 2 naming the profile and both IDs when
+they differ. This stops a swapped or edited profile from reading or writing
+the wrong organization. Profiles without the field are not checked.
+
 Environment operations require an explicit environment name. Invalid or
 incomplete profiles fail before token acquisition or a network request.
 `config validate` implements this preflight without acquiring a token.
