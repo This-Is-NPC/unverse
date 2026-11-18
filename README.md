@@ -159,7 +159,9 @@ are bundled.
 - Local choices and multiline text are supported. Money, floating-point, files,
   global/multiselect choices, and polymorphic lookups remain unsupported.
   External lookups are metadata-only: portable datasets must model all related
-  entities instead of claiming unverified external relationship integrity.
+  entities instead of claiming unverified external relationship integrity. The
+  one exception is a tenant-scoped Microsoft Entra user reference (`aaduser`),
+  carried as a UUID whose existence in the target is not verified.
 - App/flow inventory is limited to Dataverse-visible metadata, not all maker
   portal resources. `--source platform` reads the Power Platform API instead;
   a service principal needs Power Platform admin registration and an RBAC

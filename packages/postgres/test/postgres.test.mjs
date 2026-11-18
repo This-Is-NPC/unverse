@@ -297,3 +297,65 @@ test("PostgreSQL enforces alternate keys and verification detects a removed key"
       await client.end();
     }
   }));
+
+test("PostgreSQL stores a tenant-scoped reference as uuid without a foreign key", async () =>
+  withPostgres(async (connection) => {
+    const user = "11111111-2222-3333-4444-555555555555";
+    const tenant = parseModel({
+      ...sourceModel,
+      entities: sourceModel.entities.map((entity) =>
+        entity.name === "parent"
+          ? {
+              ...entity,
+              columns: [
+                ...entity.columns,
+                {
+                  name: "owner",
+                  type: "uuid",
+                  nullable: true,
+                  externalReference: {
+                    table: "aaduser",
+                    primaryKey: "aaduserid",
+                    scope: "tenant",
+                  },
+                },
+              ],
+            }
+          : entity,
+      ),
+    });
+    const selected = await createManifest(
+      tenant,
+      {
+        ...data,
+        parent: data.parent.map((row) => ({ ...row, owner: user })),
+      },
+      manifest.source.environment,
+      manifest.source.mapping,
+    );
+    const store = new PostgresStore(connection, "fixture");
+    const client = new Client(connection);
+    try {
+      const report = await store.import(selected, true);
+      assert.equal(report.verified, true);
+      assert.ok(
+        report.limitations.some((line) =>
+          /Tenant-scoped references.*not verified.*without a foreign key/.test(
+            line,
+          ),
+        ),
+      );
+      await client.connect();
+      const column = await client.query(
+        "SELECT data_type FROM information_schema.columns WHERE table_schema='fixture' AND table_name='parent' AND column_name='owner'",
+      );
+      assert.equal(column.rows[0].data_type, "uuid");
+      const constraints = await client.query(
+        "SELECT 1 FROM information_schema.table_constraints WHERE table_schema='fixture' AND table_name='parent' AND constraint_type='FOREIGN KEY'",
+      );
+      assert.equal(constraints.rowCount, 0);
+    } finally {
+      await store.close();
+      await client.end();
+    }
+  }));

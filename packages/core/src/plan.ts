@@ -180,7 +180,9 @@ export async function planSchema(
       if (
         column.externalReference !== undefined &&
         !snapshot.externalTargets?.some(
-          (target) => canonical(target) === canonical(column.externalReference),
+          (target) =>
+            target.table === column.externalReference?.table &&
+            target.primaryKey === column.externalReference.primaryKey,
         )
       )
         blocked.push({
@@ -208,7 +210,18 @@ export async function planSchema(
             column: column.name,
           });
       } else if (observed !== undefined) {
-        const { name: _name, ...definition } = column;
+        const { name: _name, externalReference, ...rest } = column;
+        // The tenant scope is a portable-model marker Dataverse does not store.
+        const definition =
+          externalReference === undefined
+            ? rest
+            : {
+                ...rest,
+                externalReference: {
+                  table: externalReference.table,
+                  primaryKey: externalReference.primaryKey,
+                },
+              };
         const additions =
           observed.definition === null
             ? null

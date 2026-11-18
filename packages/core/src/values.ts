@@ -14,12 +14,16 @@ export function normalizeDataset(model: SchemaModel, input: unknown): Dataset {
   const data = record(input);
   if (
     model.entities.some((entity) =>
-      entity.columns.some((column) => column.externalReference !== undefined),
+      entity.columns.some(
+        (column) =>
+          column.externalReference !== undefined &&
+          column.externalReference.scope !== "tenant",
+      ),
     )
   )
     throw new SchemaError(
       "unsupported",
-      "Portable datasets cannot claim integrity for external references; model the related entity instead.",
+      "Portable datasets cannot claim integrity for environment-local external references; model the related entity or declare a tenant-scoped table.",
     );
   if (
     Object.keys(data).some(

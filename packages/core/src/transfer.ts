@@ -139,7 +139,7 @@ export function verifyTransfer(
       differences: [
         { kind: "invalid-data-or-relationship", entity: "dataset" },
       ],
-      limitations,
+      limitations: [...limitations, ...lookupLimitations(manifest.model)],
     };
   }
   for (const entity of manifest.model.entities) {
@@ -189,8 +189,24 @@ export function verifyTransfer(
     targetCounts,
     identities,
     differences,
-    limitations,
+    limitations: [...limitations, ...lookupLimitations(manifest.model)],
   };
+}
+
+export function lookupLimitations(model: SchemaModel): readonly string[] {
+  const tenant = model.entities.flatMap((entity) =>
+    entity.columns
+      .filter((column) => column.externalReference?.scope === "tenant")
+      .map((column) => `${entity.name}.${column.name}`),
+  );
+  return [
+    "System lookups (owner, created by, modified by, business unit) are not modeled columns and are not copied.",
+    ...(tenant.length === 0
+      ? []
+      : [
+          `Tenant-scoped references (${tenant.join(", ")}) keep their UUIDs; their existence in the target tenant is not verified, and PostgreSQL stores them as uuid without a foreign key.`,
+        ]),
+  ];
 }
 
 const limitations = [

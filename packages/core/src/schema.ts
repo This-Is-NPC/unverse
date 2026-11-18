@@ -28,12 +28,19 @@ export interface Column {
   readonly externalReference?: {
     readonly table: string;
     readonly primaryKey: string;
+    readonly scope?: "tenant";
   };
   readonly options?: readonly {
     readonly value: number;
     readonly label: string;
   }[];
 }
+
+// Tables whose row IDs are the same in every environment of a tenant,
+// with the primary key each one is declared with.
+export const tenantScopedTables: Readonly<Record<string, string>> = {
+  aaduser: "aaduserid",
+};
 
 export interface Key {
   readonly name: string;
@@ -286,10 +293,22 @@ function parseColumn(input: unknown): Column {
         "External references require UUID and cannot also reference a modeled entity.",
       );
     const external = record(column.externalReference);
-    keys(external, ["table", "primaryKey"]);
+    keys(external, ["table", "primaryKey", "scope"]);
+    const table = name(external.table);
+    const primaryKey = name(external.primaryKey);
+    if (external.scope !== undefined) {
+      if (external.scope !== "tenant")
+        fail('An external reference scope can only be "tenant".');
+      if (tenantScopedTables[table] !== primaryKey)
+        throw new SchemaError(
+          "unsupported",
+          `Only ${Object.keys(tenantScopedTables).join(", ")} can be declared tenant-scoped; other external IDs are environment-local.`,
+        );
+    }
     externalReference = {
-      table: name(external.table),
-      primaryKey: name(external.primaryKey),
+      table,
+      primaryKey,
+      ...(external.scope === undefined ? {} : { scope: "tenant" as const }),
     };
   }
   let options: Column["options"];

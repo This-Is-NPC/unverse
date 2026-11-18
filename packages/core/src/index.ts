@@ -134,6 +134,7 @@ export {
 export {
   createManifest,
   type IdentityMap,
+  lookupLimitations,
   parseManifest,
   preservedIdentities,
   type TransferManifest,

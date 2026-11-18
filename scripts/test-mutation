@@ -214,6 +214,13 @@ mutations.push(
   ["skill-effect", "cli/help.js", "(effect: ${route.command.effect}): ", "(effect): ", "cli", "the skill lists every command path with its effect", "skill"],
 );
 
+mutations.push(
+  ["tenant-allowlist", "core/schema.js", "if (tenantScopedTables[table] !== primaryKey)", "if (false)", "core", "tenant scope is limited to the allowlisted tables", "tenant"],
+  ["tenant-resolve", "core/values.js", "if (column.references === undefined)\n                continue;", "if (column.references === undefined && column.externalReference === undefined)\n                continue;", "core", "portable datasets keep tenant references as UUIDs without resolving them", "tenant"],
+  ["tenant-limitation", "core/transfer.js", "...(tenant.length === 0\n            ? []", "...(true\n            ? []", "core", "verification reports that tenant references are not verified in the target", "tenant"],
+  ["tenant-scope-observed", "core/plan.js", "primaryKey: externalReference.primaryKey,\n                        },", "primaryKey: externalReference.primaryKey,\n                            scope: externalReference.scope,\n                        },", "dataverse", "Dataverse transfer plans report tenant references as unverified and copies them", "tenant"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

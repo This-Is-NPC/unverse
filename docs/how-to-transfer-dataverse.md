@@ -60,6 +60,27 @@ identifiers and every permitted copied field have been reviewed and authorized.
    test` re-checks the plan afterwards without writing and exits 1 while rows
    are missing or conflicting.
 
+## Tenant-scoped user references
+
+A model column declared with `"scope": "tenant"` on `aaduser` (a Microsoft
+Entra user) is copied as a UUID, since the ID is the same in the target
+environment's tenant. A policy still needs an explicit rule for it (`copy` or
+a constant), as for any other non-relationship field. The plan does not read
+the user in the target: it states that existence is not verified, and the
+lookup is bound with the user's ID. Output of the offline fixture check, not
+of a live transfer:
+
+```text
+Tenant-scoped references (parent.owner) keep their UUIDs; their existence in the target tenant is not verified, and PostgreSQL stores them as uuid without a foreign key.
+System lookups (owner, created by, modified by, business unit) are not modeled columns and are not copied.
+```
+
+What Dataverse does with an ID that has no user in the target tenant was not
+observed; check the users first. Environment-local external references (`systemuser`, `team`) and
+fields that are not modeled (owner, created by, modified by, business unit)
+are rejected, not dropped. See
+[the export page](how-to-export-data.md#tenant-scoped-user-references).
+
 ## What can go wrong
 
 Use [the seed failure and resume rules](how-to-seed-data.md#what-can-go-wrong):

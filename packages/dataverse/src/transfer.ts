@@ -33,7 +33,7 @@ export async function exportTransfer(
   const data: Record<string, readonly Record<string, unknown>[]> = {};
   for (const entity of model.entities) {
     const select = entity.columns.map((column) =>
-      column.references === undefined
+      column.references === undefined && column.externalReference === undefined
         ? physicalColumn(mapping, entity, column)
         : `_${physicalColumn(mapping, entity, column)}_value`,
     );

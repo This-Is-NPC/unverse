@@ -31,6 +31,40 @@ Keep exported manifests private: they contain IDs and record values.
    `data.data`. `data.fingerprint` binds the canonical model, source identity,
    policy, and values. Do not edit the manifest after review.
 
+## Tenant-scoped user references
+
+A column may point at a Microsoft Entra user (`aaduser`) with
+`"scope": "tenant"`, because that ID is the same in every environment of the
+tenant. The model, with placeholder names, declares:
+
+```json
+{ "name": "assignee", "type": "uuid", "nullable": true,
+  "externalReference": { "table": "aaduser", "primaryKey": "aaduserid", "scope": "tenant" } }
+```
+
+The manifest keeps the UUID as is. The export does not check that the user
+exists in any environment, and PostgreSQL stores a `uuid` column without a
+foreign key. Other tables are refused. A model that declares `systemuser`:
+
+```sh
+unverse pg export --env dev --mapping-file mapping.json --model-file bad.json --format json
+```
+
+fails with (run with the built CLI and placeholder credentials; the check
+happens before any request):
+
+```text
+"error":{"code":"unsupported","message":"Only aaduser can be declared tenant-scoped; other external IDs are environment-local."}
+```
+
+A tenant-scoped export or import lists this among the report limitations
+(produced by the offline fixture checks, not a live export):
+
+```text
+Tenant-scoped references (parent.owner) keep their UUIDs; their existence in the target tenant is not verified, and PostgreSQL stores them as uuid without a foreign key.
+System lookups (owner, created by, modified by, business unit) are not modeled columns and are not copied.
+```
+
 ## What can go wrong
 
 The export is held in memory and is intended for a bounded modeled dataset.
@@ -43,7 +77,10 @@ detected a temporal mismatch when fractional input was assumed portable.
 
 No workflows, plugins, policies, auditing, files, or unmodeled fields
 are exported. Local single-select choices and bounded multiline text are
-supported; global/multiselect choices and external reference datasets are not.
+supported; global/multiselect choices and environment-local external
+reference datasets are not. A tenant-scoped user reference is supported (see
+below). Owner, created by, modified by, and business unit are not modeled and
+not exported.
 PostgreSQL transfer does not recreate application behaviour.
 
 ## Next

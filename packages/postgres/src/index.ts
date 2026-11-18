@@ -252,14 +252,16 @@ export class PostgresStore {
           (candidate) => candidate.name === column.references,
         );
         const wrongReference =
-          column.references !== undefined &&
-          !references.rows.some(
-            (row) =>
-              row.column_name === column.name &&
-              row.foreign_schema === this.schema &&
-              row.foreign_table === column.references &&
-              row.foreign_column === target?.primaryKey,
-          );
+          column.references !== undefined
+            ? !references.rows.some(
+                (row) =>
+                  row.column_name === column.name &&
+                  row.foreign_schema === this.schema &&
+                  row.foreign_table === column.references &&
+                  row.foreign_column === target?.primaryKey,
+              )
+            : column.externalReference !== undefined &&
+              references.rows.some((row) => row.column_name === column.name);
         if (
           observed?.data_type !== typeNames[column.type] ||
           observed?.is_nullable !== (column.nullable ? "YES" : "NO") ||

@@ -105,6 +105,21 @@ export async function dataFixture(input = sourceModel) {
         .join(""),
     };
   };
+  for (const entity of model.entities)
+    for (const { externalReference } of entity.columns)
+      if (externalReference && !fixture.entities.has(externalReference.table))
+        fixture.entities.set(externalReference.table, {
+          metadata: {
+            LogicalName: externalReference.table,
+            EntitySetName: `${externalReference.table}s`,
+            MetadataId: `external-${externalReference.table}`,
+            PrimaryIdAttribute: externalReference.primaryKey,
+            PrimaryNameAttribute: "name",
+          },
+          columns: [],
+          keys: [],
+          relationships: [],
+        });
   const plan = await planSchema(
     model,
     mapping,

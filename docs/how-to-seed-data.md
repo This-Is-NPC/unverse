@@ -16,7 +16,7 @@ The model's JSON can also be saved separately for schema planning.
 Every row has a stable `key` and explicit `values` for every non-key column,
 including nulls. Do not supply the primary UUID. For a modeled relationship,
 use `{ "key": "target-row-key" }` or null. All entities have a rows array,
-which may be empty. External references are not portable seed relationships.
+which may be empty. Environment-local external references are not portable seed relationships; a tenant-scoped `aaduser` reference is a plain UUID value.
 
 ## Steps
 

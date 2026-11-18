@@ -1,7 +1,9 @@
 import {
+  type Column,
   canonical,
   type DataverseMapping,
   fingerprint,
+  lookupLimitations,
   type PlanEffect,
   parseManifest,
   parseMapping,
@@ -83,7 +85,9 @@ async function planData(
           1 +
           entity.columns.filter(
             (column) =>
-              column.references !== undefined && row[column.name] !== null,
+              (column.references !== undefined ||
+                column.externalReference !== undefined) &&
+              row[column.name] !== null,
           ).length;
       } else if (canonical(existing) !== canonical(row))
         blocked.push({
@@ -112,6 +116,7 @@ async function planData(
     create,
     blocked,
     limitations: [
+      ...lookupLimitations(manifest.model),
       "Create-only atomic changeset; existing differing rows, deletes, and overwrites are blocked.",
       "The dataset is bounded to 1000 operations and 4 MB. Resume means re-plan and verify, not per-row checkpoints.",
       "A lost response has an unknown outcome until inspection. No write is retried automatically.",
@@ -217,6 +222,20 @@ export async function applyDataPlan(
       return [entity.name, identifier(definition.entitySet)];
     }),
   );
+  const referenceSet = (column: Column) => {
+    const set =
+      column.externalReference === undefined
+        ? sets.get(String(column.references))
+        : definitions.find(
+            (table) => table.logicalName === column.externalReference?.table,
+          )?.entitySet;
+    if (set === undefined || set === null)
+      throw new DataverseError(
+        "unsupported",
+        "A referenced table has no entity set.",
+      );
+    return identifier(set);
+  };
   const operations: {
     path: string;
     createOnly: boolean;
@@ -226,7 +245,7 @@ export async function applyDataPlan(
   for (const entity of manifest.model.entities) {
     const navigations = new Map<string, string>();
     for (const column of entity.columns)
-      if (column.references !== undefined) {
+      if (column.references !== undefined || column.externalReference) {
         const result = await client.collect(
           endpoint(
             "RelationshipDefinitions/Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata",
@@ -240,7 +259,8 @@ export async function applyDataPlan(
         if (
           result.rows.length !== 1 ||
           result.rows[0]?.ReferencedEntity !==
-            `${mapping.prefix}_${column.references}`
+            (column.externalReference?.table ??
+              `${mapping.prefix}_${column.references}`)
         )
           throw new DataverseError(
             "unsupported",
@@ -270,7 +290,7 @@ export async function applyDataPlan(
       for (const column of entity.columns) {
         const value = row[column.name];
         if (column.name === entity.primaryKey) continue;
-        if (column.references === undefined)
+        if (column.references === undefined && !column.externalReference)
           values[physicalColumn(mapping, entity, column)] =
             value !== null && column.type === "decimal" ? Number(value) : value;
         else if (value !== null)
@@ -278,7 +298,7 @@ export async function applyDataPlan(
             path,
             createOnly: false,
             body: {
-              [`${navigations.get(column.name)}@odata.bind`]: `/${sets.get(column.references)}(${guid(String(value))})`,
+              [`${navigations.get(column.name)}@odata.bind`]: `/${referenceSet(column)}(${guid(String(value))})`,
             },
           });
       }

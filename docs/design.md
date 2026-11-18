@@ -487,7 +487,35 @@ using physical logical names outside the managed prefix. Inspection and apply
 verify that target's actual primary key before creating an owned lookup.
 External targets are read, not provisioned or modified. An external relationship
 is metadata-only: seed, portable export/import, and equivalence checks reject
-external references. Model related entities explicitly for portable datasets.
+environment-local external references. Model related entities explicitly for
+portable datasets.
+
+An external reference may add `"scope": "tenant"`:
+
+```json
+{ "name": "assignee", "type": "uuid", "nullable": true,
+  "externalReference": { "table": "aaduser", "primaryKey": "aaduserid", "scope": "tenant" } }
+```
+
+Tenant scope says the target row ID is the same in every environment of the
+tenant, so it can travel in a portable dataset. Only an allowlist of tables
+may declare it, and validation rejects it elsewhere (including a different
+primary key). The allowlist is `aaduser` (a Microsoft Entra user, keyed by
+`aaduserid`, the Entra object ID). `systemuser`, `team`, and `businessunit`
+are not on it: their IDs are generated per environment. Scope is a model
+marker that Dataverse does not store, so schema planning compares only the
+table and primary key. Datasets carry the value as a canonical UUID or null.
+It is not resolved against the modeled dataset and no read of the target
+table is made: existence of the user in the target tenant is reported as not
+verified, not checked. Dataverse writes bind the lookup to the table's entity
+set, which also needs an existing lookup relationship to that table.
+
+System lookups (owner, created by, modified by, business unit) are never
+modeled columns. Export reads only modeled columns, and a manifest or
+pipeline row that carries any other field is rejected as an unknown column
+rather than dropped. Plans and verification reports state that these lookups
+are not copied. A `--policy-file` still needs a rule for a tenant-scoped
+column, because a user ID can identify a person.
 
 The mapping is a JSON document passed with `--mapping-file <path>` to
 `schema inspect`, `schema plan`, `pg export` and the `transfer` pipeline; there are no
@@ -621,6 +649,12 @@ verification across tables is not a transaction snapshot. Reports explicitly
 exclude workflows, plugins, auditing, policies, files, and unmodeled semantics.
 This is not a complete Power Platform migration or continuous synchronization.
 
+A tenant-scoped reference maps to a plain `uuid` column with no foreign key,
+since the referenced table is not part of the schema. Verification checks that
+no foreign key was added, and its report limitations say that the existence of
+the referenced user is not verified and that system lookups are not copied.
+The Dataverse data plan and its verification report carry the same lines.
+
 Offline PostgreSQL checks use the mise-pinned server in a fresh private data
 directory and Unix socket with no TCP listener. They wait for the server's
 readiness output, stop its owned process, and remove the directory on exit.
@@ -629,8 +663,9 @@ the dedicated DEV fixture namespace; it is excluded from offline verification.
 
 Multiline text maps to bounded varchar. Choices map to integer plus a validated
 local-value CHECK constraint; the manifest preserves option labels. Verification
-checks the expected constraint expression as well as actual values. External
-reference semantics are rejected instead of losing foreign-key integrity.
+checks the expected constraint expression as well as actual values.
+Environment-local external reference semantics are rejected instead of losing
+foreign-key integrity; tenant-scoped references follow the paragraph above.
 
 ## 16. Community development workflow
 
