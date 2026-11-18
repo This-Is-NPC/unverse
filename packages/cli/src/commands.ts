@@ -144,15 +144,10 @@ const flagsets = {
   mapping: {
     flags: [
       {
-        name: "--prefix",
-        value: "prefix",
-        summary: "Select the explicit Dataverse publisher prefix.",
-        required: true,
-      },
-      {
-        name: "--solution",
-        value: "unique-name",
-        summary: "Bind the mapping to an existing unmanaged solution.",
+        name: "--mapping-file",
+        value: "path",
+        summary:
+          "Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.",
         required: true,
       },
     ],

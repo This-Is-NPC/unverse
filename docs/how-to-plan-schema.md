@@ -14,10 +14,15 @@ supported types and a 1:N relationship. See
 
 ## Steps
 
-1. Save a reviewable plan. File paths, prefix, and solution below are placeholders:
+1. Save a reviewable plan. File paths, prefix, and solution below are
+   placeholders. `mapping.json` holds the publisher prefix and the solution:
+
+   ```json
+   { "prefix": "uv", "solution": "UnverseFixture" }
+   ```
 
    ```sh
-   unverse schema plan --env dev --prefix uv --solution UnverseFixture --model-file schema.json --format json > plan.json
+   unverse schema plan --env dev --mapping-file mapping.json --model-file schema.json --format json > plan.json
    ```
 
    The installed fixture produced two `create-entity` operations and no blocks.
@@ -102,11 +107,31 @@ supported types and a 1:N relationship. See
    no rows; row-level security can hide rows from it. Multiline text and
    other columns that cannot be filtered are always `"unknown"`.
 
-6. Optionally declare solution components in the mapping document (see
+6. Optionally declare solution components in the same `mapping.json` (see
    [the design](design.md#14-schema-model-and-safety)): text environment
    variable definitions (`environmentVariables`) and connection references
-   (`connectionReferences`). Against a synthetic environment where neither
-   exists, planning listed:
+   (`connectionReferences`):
+
+   ```json
+   {
+     "prefix": "uv",
+     "solution": "UnverseFixture",
+     "environmentVariables": [
+       {
+         "schemaName": "uv_ApiUrl",
+         "displayName": "API URL",
+         "type": "text",
+         "defaultValue": "https://api.example.test"
+       }
+     ],
+     "connectionReferences": [
+       { "displayName": "Office 365-Users", "connector": "shared_office365users" }
+     ]
+   }
+   ```
+
+   Planning with the command from step 1 against a synthetic environment
+   where neither exists listed, besides the entity operations:
 
    ```json
    {

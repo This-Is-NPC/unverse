@@ -62,10 +62,8 @@ export const scenes = [
       "inspect",
       "--env",
       "dev",
-      "--prefix",
-      "uv",
-      "--solution",
-      "UnverseFixture",
+      "--mapping-file",
+      "mapping.json",
     ],
   },
   {
@@ -75,10 +73,8 @@ export const scenes = [
       "plan",
       "--env",
       "dev",
-      "--prefix",
-      "uv",
-      "--solution",
-      "UnverseFixture",
+      "--mapping-file",
+      "mapping.json",
       "--model-file",
       "schema.json",
     ],
@@ -90,10 +86,8 @@ export const scenes = [
       "export",
       "--env",
       "dev",
-      "--prefix",
-      "tx",
-      "--solution",
-      "TransferFixture",
+      "--mapping-file",
+      "transfer-mapping.json",
       "--model-file",
       "schema.json",
     ],
@@ -146,10 +140,8 @@ export const scenes = [
       "plan",
       "--env",
       "dev",
-      "--prefix",
-      "tx",
-      "--solution",
-      "TransferFixture",
+      "--mapping-file",
+      "transfer-mapping.json",
       "--manifest-file",
       "transfer-source.json",
       "--policy-file",
@@ -254,6 +246,14 @@ export async function stageScenes(root, consumer) {
   cpSync(
     resolve(root, "packages/core/test/fixtures/schema.json"),
     resolve(consumer.directory, "schema.json"),
+  );
+  writeFileSync(
+    resolve(consumer.directory, "mapping.json"),
+    JSON.stringify({ prefix: "uv", solution: "UnverseFixture" }),
+  );
+  writeFileSync(
+    resolve(consumer.directory, "transfer-mapping.json"),
+    JSON.stringify({ prefix: "tx", solution: "TransferFixture" }),
   );
   const model = parseModel(
     JSON.parse(

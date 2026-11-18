@@ -67,6 +67,15 @@ export interface CliRuntime {
   readonly connectPostgres?: (profile: PostgresProfile) => PostgresStore;
 }
 
+async function readMapping(
+  runtime: CliRuntime,
+  flags: ReadonlyMap<string, string>,
+) {
+  return parseMapping(
+    JSON.parse(await runtime.readFile(flags.get("--mapping-file") ?? "")),
+  );
+}
+
 export async function runCli(
   argv: readonly string[],
   runtime: CliRuntime,
@@ -206,10 +215,7 @@ export async function runCli(
       command === "schema inspect" ||
       command === "schema plan" ||
       command === "pg export"
-        ? parseMapping({
-            prefix: flags.get("--prefix"),
-            solution: flags.get("--solution"),
-          })
+        ? await readMapping(runtime, flags)
         : undefined;
     const model =
       command === "schema plan" || command === "pg export"
@@ -351,10 +357,7 @@ export async function runCli(
           client,
           input.outputVersion === outputVersion ? input.data : input,
           JSON.parse(await runtime.readFile(flags.get("--policy-file") ?? "")),
-          parseMapping({
-            prefix: flags.get("--prefix"),
-            solution: flags.get("--solution"),
-          }),
+          await readMapping(runtime, flags),
           context,
         );
       } else {

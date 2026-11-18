@@ -256,3 +256,62 @@ function attribute(body) {
     .replace("AttributeMetadata", "");
   return { ...body, LogicalName: body.SchemaName, AttributeType: type };
 }
+
+export function solutionComponentFixture() {
+  const state = schemaFixture();
+  const definitions = new Map();
+  const references = new Map();
+  const reads = [];
+  const { get, request } = state.client.transport;
+  const filtered = (rows, field, url) =>
+    rows.filter(
+      (row) =>
+        `${field} eq '${row[field]}'` ===
+        new URL(url).searchParams.get("$filter"),
+    );
+  state.client.transport.get = async (url, headers) => {
+    const path = decodeURIComponent(new URL(url).pathname).replace(
+      "/api/data/v9.2/",
+      "",
+    );
+    if (
+      path === "environmentvariabledefinitions" ||
+      path === "connectionreferences"
+    ) {
+      reads.push(url);
+      const rows = path === "connectionreferences" ? references : definitions;
+      const field =
+        path === "connectionreferences"
+          ? "connectionreferencelogicalname"
+          : "schemaname";
+      return {
+        status: 200,
+        headers: {},
+        body: JSON.stringify({
+          value: filtered([...rows.values()], field, url),
+        }),
+      };
+    }
+    return get(url, headers);
+  };
+  state.client.transport.request = async (method, url, headers, json) => {
+    const path = decodeURIComponent(new URL(url).pathname).replace(
+      "/api/data/v9.2/",
+      "",
+    );
+    if (
+      path === "environmentvariabledefinitions" ||
+      path === "connectionreferences"
+    ) {
+      const body = JSON.parse(json);
+      state.writes.push({ method, path, body, headers });
+      (path === "connectionreferences" ? references : definitions).set(
+        body.schemaname ?? body.connectionreferencelogicalname,
+        body,
+      );
+      return { status: 204, headers: {}, body: "" };
+    }
+    return request(method, url, headers, json);
+  };
+  return { ...state, definitions, references, reads };
+}

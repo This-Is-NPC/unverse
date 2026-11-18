@@ -15,11 +15,11 @@ Keep exported manifests private: they contain IDs and record values.
 
 ## Steps
 
-1. Export into a local file. The model path, prefix, solution, and output path
-   below are placeholders:
+1. Export into a local file. The mapping, model, and output paths below are
+   placeholders. `mapping.json` holds `{ "prefix": "tx", "solution": "TransferFixture" }`:
 
    ```sh
-   unverse pg export --env dev --prefix tx --solution TransferFixture --model-file schema.json --format json > manifest.json
+   unverse pg export --env dev --mapping-file mapping.json --model-file schema.json --format json > manifest.json
    ```
 
    The installed synthetic fixture exported one parent, one related child,

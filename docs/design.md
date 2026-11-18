@@ -399,8 +399,11 @@ External targets are read, not provisioned or modified. An external relationship
 is metadata-only: seed, portable export/import, and equivalence checks reject
 external references. Model related entities explicitly for portable datasets.
 
-Two Dataverse solution components are declared in the mapping document, not in
-the portable model, so PostgreSQL ignores them:
+The mapping is a JSON document passed with `--mapping-file <path>` to
+`schema inspect`, `schema plan`, `transfer plan` and `pg export`; there are no
+separate prefix or solution flags. Two Dataverse solution components are
+declared in the same document, not in the portable model, so PostgreSQL
+ignores them:
 
 ```json
 {

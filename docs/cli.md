@@ -142,15 +142,14 @@ Inspect normalized metadata within an explicit publisher prefix.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse schema inspect [--config <path>] --env <name> [--format <human|json|csv>] --prefix <prefix> --solution <unique-name>`
+`unverse schema inspect [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path>`
 
 ### Flags
 
 - `--config <path>`: Read configuration instead of unverse.config.json.
 - `--env <name>` (required): Select a named environment profile.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--prefix <prefix>` (required): Select the explicit Dataverse publisher prefix.
-- `--solution <unique-name>` (required): Bind the mapping to an existing unmanaged solution.
+- `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 
 ## schema plan
 
@@ -159,15 +158,14 @@ Plan additive metadata changes and report blocked operations.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse schema plan [--config <path>] --env <name> [--format <human|json|csv>] --prefix <prefix> --solution <unique-name> --model-file <path>`
+`unverse schema plan [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
 
 ### Flags
 
 - `--config <path>`: Read configuration instead of unverse.config.json.
 - `--env <name>` (required): Select a named environment profile.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--prefix <prefix>` (required): Select the explicit Dataverse publisher prefix.
-- `--solution <unique-name>` (required): Bind the mapping to an existing unmanaged solution.
+- `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--model-file <path>` (required): Read the versioned logical schema model.
 
 ## schema apply
@@ -529,15 +527,14 @@ Review a policy-filtered Dataverse-to-Dataverse create-only transfer.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse transfer plan [--config <path>] --env <name> [--format <human|json|csv>] --prefix <prefix> --solution <unique-name> --manifest-file <path> --policy-file <path>`
+`unverse transfer plan [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path> --manifest-file <path> --policy-file <path>`
 
 ### Flags
 
 - `--config <path>`: Read configuration instead of unverse.config.json.
 - `--env <name>` (required): Select a named environment profile.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--prefix <prefix>` (required): Select the explicit Dataverse publisher prefix.
-- `--solution <unique-name>` (required): Bind the mapping to an existing unmanaged solution.
+- `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--manifest-file <path>` (required): Read a canonical transfer manifest or its result envelope.
 - `--policy-file <path>` (required): Require an explicit copy or constant rule for every non-key field.
 
@@ -569,15 +566,14 @@ Export the modeled Dataverse subset into a verified transfer manifest.
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse pg export [--config <path>] --env <name> [--format <human|json|csv>] --prefix <prefix> --solution <unique-name> --model-file <path>`
+`unverse pg export [--config <path>] --env <name> [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
 
 ### Flags
 
 - `--config <path>`: Read configuration instead of unverse.config.json.
 - `--env <name>` (required): Select a named environment profile.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
-- `--prefix <prefix>` (required): Select the explicit Dataverse publisher prefix.
-- `--solution <unique-name>` (required): Bind the mapping to an existing unmanaged solution.
+- `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--model-file <path>` (required): Read the versioned logical schema model.
 
 ## pg import

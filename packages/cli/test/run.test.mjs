@@ -27,6 +27,7 @@ import {
 import {
   schemaFixture,
   model as schemaModel,
+  solutionComponentFixture,
 } from "../../dataverse/test/fixtures/schema.mjs";
 import { renderCliReference } from "../dist/help.js";
 import { runCli } from "../dist/run.js";
@@ -288,6 +289,66 @@ test("capped CLI queries return inconclusive coverage and exit seven", async () 
   assert.equal(JSON.parse(output[0]).data.rows.length, 1);
 });
 
+const mappingDocument = { prefix: "uv", solution: "UnverseFixture" };
+
+test("CLI schema planning reads solution components from the mapping file", async () => {
+  const documents = {
+    "unverse.config.json": validConfig,
+    "model.json": JSON.stringify(schemaModel),
+    "mapping.json": JSON.stringify({
+      ...mappingDocument,
+      environmentVariables: [
+        {
+          schemaName: "uv_ApiUrl",
+          displayName: "API URL",
+          type: "text",
+          defaultValue: "https://api.example.test",
+        },
+      ],
+      connectionReferences: [
+        {
+          displayName: "Office 365-Users",
+          connector: "shared_office365users",
+        },
+      ],
+    }),
+  };
+  const plan = async (flags) => {
+    const output = [];
+    const code = await runCli(
+      ["schema", "plan", "--env", "dev", ...flags, "--format", "json"],
+      {
+        ...runtime(() => validConfig, output),
+        readFile: async (path) => documents[path],
+        connect: () => solutionComponentFixture().client,
+      },
+    );
+    return { code, output };
+  };
+  const planned = await plan([
+    "--mapping-file",
+    "mapping.json",
+    "--model-file",
+    "model.json",
+  ]);
+  assert.equal(planned.code, 0);
+  const kinds = JSON.parse(planned.output[0]).data.operations.map(
+    (operation) => operation.kind,
+  );
+  assert.ok(kinds.includes("create-environment-variable"));
+  assert.ok(kinds.includes("create-connection-reference"));
+  const removed = await plan([
+    "--prefix",
+    "uv",
+    "--solution",
+    "UnverseFixture",
+    "--model-file",
+    "model.json",
+  ]);
+  assert.equal(removed.code, 2);
+  assert.match(removed.output.join("\n"), /Unknown flag.*--prefix|--prefix/);
+});
+
 test("CLI schema planning and confirmed apply share the result contract", async () => {
   const output = [];
   const fixture = schemaFixture();
@@ -299,7 +360,9 @@ test("CLI schema planning and confirmed apply share the result contract", async 
         ? validConfig
         : path === "model.json"
           ? JSON.stringify(schemaModel)
-          : JSON.stringify(plan),
+          : path === "mapping.json"
+            ? JSON.stringify(mappingDocument)
+            : JSON.stringify(plan),
     connect: () => fixture.client,
   };
   assert.equal(
@@ -309,10 +372,8 @@ test("CLI schema planning and confirmed apply share the result contract", async 
         "plan",
         "--env",
         "dev",
-        "--prefix",
-        "uv",
-        "--solution",
-        "UnverseFixture",
+        "--mapping-file",
+        "mapping.json",
         "--model-file",
         "model.json",
         "--format",

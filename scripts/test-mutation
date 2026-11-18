@@ -145,6 +145,10 @@ mutations.push(
   ["component-absent", "core/solution-components.js", "operations.push({ kind: \"create-connection-reference\", logicalName });", "void logicalName;", "dataverse", "solution components are created when absent and satisfied when equal", "solution-components"],
 );
 
+mutations.push(
+  ["mapping-components", "cli/run.js", "JSON.parse(await runtime.readFile(flags.get(\"--mapping-file\") ?? \"\"))", "(({ prefix, solution }) => ({ prefix, solution }))(JSON.parse(await runtime.readFile(flags.get(\"--mapping-file\") ?? \"\")))", "cli", "CLI schema planning reads solution components from the mapping file"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

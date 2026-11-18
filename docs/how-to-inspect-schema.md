@@ -8,15 +8,19 @@ This page needs [a connected environment](how-to-connect-an-environment.md).
 ## Before you start
 
 Install the candidate and identify the existing solution's unique name and
-publisher prefix. `uv` and `UnverseFixture` below are placeholders, not names
-to reuse in an existing environment. Metadata read permissions are required.
+publisher prefix. `uv`, `UnverseFixture` and `mapping.json` below are
+placeholders, not names to reuse in an existing environment. Metadata read permissions are required.
 
 ## Steps
 
-1. Inspect the explicit namespace:
+1. Write the mapping document, then inspect the explicit namespace:
+
+   ```json
+   { "prefix": "uv", "solution": "UnverseFixture" }
+   ```
 
    ```sh
-   unverse schema inspect --env dev --prefix uv --solution UnverseFixture --format json
+   unverse schema inspect --env dev --mapping-file mapping.json --format json
    ```
 
    The installed synthetic fixture produced `data.entities: []` for an empty
