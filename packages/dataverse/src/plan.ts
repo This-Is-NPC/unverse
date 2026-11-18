@@ -81,6 +81,7 @@ async function verifySchemaPlan(
     mapping,
     environment,
     await inspectSchema(client, mapping, model),
+    { prune: value.effect === "destructive" },
   );
   return {
     kind: "schema" as const,

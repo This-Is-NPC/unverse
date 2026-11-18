@@ -18,6 +18,7 @@ import {
   record,
   type SchemaEnvironment,
   type SchemaModel,
+  type SchemaOperation,
   type SchemaPlan,
   type SchemaSnapshot,
 } from "@unverse/core";
@@ -82,6 +83,12 @@ export async function inspectSchema(
     const keys = await client.collect(
       `EntityDefinitions(LogicalName='${safeName(name)}')/Keys`,
     );
+    const relationships = await client.collect(
+      endpoint(
+        `EntityDefinitions(LogicalName='${safeName(name)}')/ManyToOneRelationships`,
+        { $select: "SchemaName,ReferencingAttribute,ReferencedEntity" },
+      ),
+    );
     const modeled = model?.entities.find(
       (candidate) => physicalEntity(mapping, candidate) === name,
     );
@@ -126,6 +133,13 @@ export async function inspectSchema(
       columns: observedColumns,
       keys: keys.rows
         .map(normalizeKey)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      relationships: relationships.rows
+        .map((row) => ({
+          name: text(row, "SchemaName"),
+          lookup: text(row, "ReferencingAttribute"),
+          target: text(row, "ReferencedEntity"),
+        }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     });
   }
@@ -195,7 +209,10 @@ export async function applySchema(
   await assertEnvironment(client, environment);
   const mapping = parseMapping(value.mapping);
   const snapshot = await inspectSchema(client, mapping, model);
-  const expected = await planSchema(model, mapping, environment, snapshot);
+  const prune = value.effect === "destructive";
+  const expected = await planSchema(model, mapping, environment, snapshot, {
+    prune,
+  });
   if (canonical(expected) !== canonical(input))
     throw new DataverseError(
       "invalid-input",
@@ -235,10 +252,19 @@ export async function applySchema(
   const headers = { "MSCRM.SolutionUniqueName": mapping.solution };
   const relationships: { entity: Entity; column: Column }[] = [];
   const keys: { entity: Entity; key: Key }[] = [];
+  const remove = async (kind: RemovalKind): Promise<void> => {
+    for (const operation of expected.operations)
+      if (operation.kind === kind)
+        await deleteMetadata(client, mapping, model, operation);
+  };
+  await remove("delete-key");
   for (const operation of expected.operations) {
     if (
       isSolutionComponentOperation(operation) ||
-      isSecurityRoleOperation(operation)
+      isSecurityRoleOperation(operation) ||
+      operation.kind === "delete-key" ||
+      operation.kind === "delete-relationship" ||
+      operation.kind === "delete-column"
     )
       continue;
     const entity = model.entities.find(
@@ -378,6 +404,8 @@ export async function applySchema(
   }
   for (const { entity, key } of keys)
     await createKey(client, mapping, entity, key, headers);
+  await remove("delete-relationship");
+  await remove("delete-column");
   await createSolutionComponents(
     client,
     mapping,
@@ -396,7 +424,86 @@ export async function applySchema(
     mapping,
     environment,
     await inspectSchema(client, mapping, model),
+    { prune },
   );
+}
+
+type RemovalKind = "delete-key" | "delete-relationship" | "delete-column";
+
+async function deleteMetadata(
+  client: DataverseClient,
+  mapping: DataverseMapping,
+  model: SchemaModel,
+  operation: Extract<SchemaOperation, { kind: RemovalKind }>,
+): Promise<void> {
+  const entity = safeName(
+    physicalEntity(
+      mapping,
+      model.entities.find(
+        (candidate) => candidate.name === operation.entity,
+      ) as Entity,
+    ),
+  );
+  const owner = `EntityDefinitions(LogicalName='${entity}')`;
+  if (operation.kind === "delete-key") {
+    const keys = `${owner}/Keys`;
+    const row = (await client.collect(keys)).rows.find(
+      (candidate) => candidate.SchemaName === operation.key,
+    );
+    if (row === undefined)
+      throw new DataverseError(
+        "service",
+        `The key ${operation.key} to delete is not listed.`,
+      );
+    await client.write("DELETE", `${keys}(${guid(text(row, "MetadataId"))})`);
+    await awaitGone(client, operation.key, async () =>
+      (await client.collect(keys)).rows.some(
+        (candidate) => candidate.SchemaName === operation.key,
+      ),
+    );
+  } else if (operation.kind === "delete-relationship") {
+    await client.write(
+      "DELETE",
+      `RelationshipDefinitions(SchemaName='${safeName(operation.relationship)}')`,
+    );
+    await awaitGone(client, operation.relationship, async () =>
+      (
+        await client.collect(
+          endpoint(`${owner}/ManyToOneRelationships`, {
+            $select: "SchemaName",
+          }),
+        )
+      ).rows.some((row) => row.SchemaName === operation.relationship),
+    );
+  } else {
+    const attributes = `${owner}/Attributes`;
+    await client.write(
+      "DELETE",
+      `${attributes}(LogicalName='${safeName(operation.column)}')`,
+    );
+    await awaitGone(client, operation.column, async () =>
+      (
+        await client.collect(endpoint(attributes, { $select: "LogicalName" }))
+      ).rows.some((row) => row.LogicalName === operation.column),
+    );
+  }
+}
+
+async function awaitGone(
+  client: DataverseClient,
+  subject: string,
+  stillListed: () => Promise<boolean>,
+): Promise<void> {
+  const gone = await client.until(
+    async () => ((await stillListed()) ? undefined : true),
+    visibilityDeadline,
+    visibilityInterval,
+  );
+  if (gone === undefined)
+    throw new DataverseError(
+      "service",
+      `Deleted metadata ${subject} is still listed after ${visibilityDeadline / 1000} seconds; inspect and create a fresh plan before retrying.`,
+    );
 }
 
 async function createKey(

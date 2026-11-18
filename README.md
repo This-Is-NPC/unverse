@@ -97,7 +97,7 @@ can allowlist the `read` commands.
 | `table list` | Discover table metadata |
 | `record query <table>` | Run a paginated read |
 | `schema inspect` | Inspect an explicitly mapped namespace |
-| `schema plan` | Review additive operations and blocked changes |
+| `schema plan` | Review additive operations and blocked changes; `--prune` plans deletions |
 | `pg export` | Export a compatible modeled dataset |
 | `pg import` | Create and verify an owned PostgreSQL schema |
 | `pg verify` | Compare a committed target with its manifest |
@@ -121,7 +121,7 @@ See the generated [CLI reference](docs/cli.md) for arguments.
 ## What it does not do
 
 This candidate does not provide a TUI, auditing, implicit impersonation,
-effective-record-access checks, SQL, destructive schema changes, purge,
+effective-record-access checks, SQL, entity deletion, purge,
 deduplication, Power BI inventory, reverse PostgreSQL-to-Dataverse import, or
 continuous synchronization. No SLB application schemas or business pipelines
 are bundled.

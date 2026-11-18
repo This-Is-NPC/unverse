@@ -200,6 +200,11 @@ for (const entity of model.entities) {
     })),
   };
   routes[`EntityDefinitions(LogicalName='${physical}')/Keys`] = { value: [] };
+  routes[
+    `EntityDefinitions(LogicalName='${physical}')/ManyToOneRelationships`
+  ] = {
+    value: [],
+  };
   routes[`${physical}s`] = {
     value: data[entity.name].map((row) =>
       Object.fromEntries(

@@ -517,3 +517,353 @@ test("blocked column removals record whether the column holds data", async () =>
   );
   assert.deepEqual(fixture.writes, []);
 });
+
+const plannedModel = parseModel({
+  ...relationModel,
+  entities: relationModel.entities.map((entity) =>
+    entity.name === "parent"
+      ? {
+          ...entity,
+          columns: [
+            ...entity.columns,
+            {
+              name: "notes",
+              type: "multiline",
+              nullable: true,
+              maxLength: 500,
+            },
+            { name: "code", type: "text", nullable: false, maxLength: 20 },
+          ],
+          keys: [{ name: "by_code", columns: ["code"] }],
+        }
+      : {
+          ...entity,
+          columns: [
+            ...entity.columns,
+            { name: "extra", type: "integer", nullable: true },
+          ],
+        },
+  ),
+});
+
+const prunedModel = parseModel({
+  ...relationModel,
+  entities: relationModel.entities.map((entity) =>
+    entity.name === "child"
+      ? {
+          ...entity,
+          columns: entity.columns.filter((column) => column.name !== "parent"),
+        }
+      : entity,
+  ),
+});
+
+async function deployed(options, virtual = false) {
+  const fixture = schemaFixture(options);
+  await applySchema(
+    fixture.client,
+    await plan(fixture, plannedModel),
+    environment,
+    true,
+  );
+  const parent = fixture.entities.get("uv_parent");
+  const child = fixture.entities.get("uv_child");
+  const none = { Value: "None" };
+  parent.columns.push(
+    {
+      LogicalName: "other_foreign",
+      AttributeType: "String",
+      MaxLength: 10,
+      RequiredLevel: none,
+    },
+    {
+      LogicalName: "createdon",
+      AttributeType: "DateTime",
+      RequiredLevel: none,
+    },
+    {
+      LogicalName: "uv_shadow",
+      AttributeType: "String",
+      MaxLength: 10,
+      RequiredLevel: none,
+      AttributeOf: "uv_notes",
+    },
+    {
+      LogicalName: "uv_logical",
+      AttributeType: "String",
+      MaxLength: 10,
+      RequiredLevel: none,
+      IsLogical: true,
+    },
+  );
+  if (virtual)
+    parent.columns.push({
+      LogicalName: "uv_virtual",
+      AttributeType: "Virtual",
+      RequiredLevel: none,
+    });
+  parent.keys.push({
+    SchemaName: "other_key",
+    KeyAttributes: ["name"],
+    MetadataId: "00000000-0000-0000-0000-0000000000ff",
+  });
+  child.columns.push({
+    LogicalName: "other_ref",
+    AttributeType: "Lookup",
+    RequiredLevel: none,
+    Targets: ["account"],
+  });
+  child.relationships.push({
+    SchemaName: "other_child_ref",
+    ReferencingAttribute: "other_ref",
+    ReferencedEntity: "account",
+  });
+  fixture.writes.length = 0;
+  return fixture;
+}
+
+test("prune plans delete owned keys, relationships and columns and nothing else", async () => {
+  const fixture = await deployed(
+    { rows: { uv_parent: [{ uv_code: "A" }] } },
+    true,
+  );
+  const unchanged = await plan(fixture, prunedModel);
+  assert.equal(unchanged.effect, "write");
+  assert.ok(
+    !unchanged.operations.some((entry) => entry.kind.startsWith("delete")),
+  );
+  assert.ok(unchanged.blocked.some((entry) => entry.path === "child.uv_extra"));
+  const pruned = await planSchema(
+    prunedModel,
+    mapping,
+    environment,
+    await inspectSchema(fixture.client, mapping, prunedModel),
+    { prune: true },
+  );
+  assert.equal(pruned.effect, "destructive");
+  const deletions = pruned.operations.filter((entry) =>
+    entry.kind.startsWith("delete"),
+  );
+  assert.deepEqual(
+    deletions.map(({ kind, entity, ...rest }) => [
+      kind,
+      entity,
+      rest.key ?? rest.relationship ?? rest.column,
+    ]),
+    [
+      ["delete-key", "parent", "uv_by_code"],
+      ["delete-relationship", "child", "uv_child_parent"],
+      ["delete-column", "child", "uv_extra"],
+      ["delete-column", "parent", "uv_code"],
+      ["delete-column", "parent", "uv_notes"],
+    ],
+  );
+  assert.deepEqual(
+    pruned.operations.map((entry) => entry.kind),
+    deletions.map((entry) => entry.kind),
+  );
+  const code = deletions.find((entry) => entry.column === "uv_code");
+  assert.equal(code.holdsData, true);
+  assert.match(code.evidence, /returned a row/);
+  assert.equal(
+    deletions.find((entry) => entry.column === "uv_notes").holdsData,
+    "unknown",
+  );
+  assert.equal(
+    deletions.find((entry) => entry.column === "uv_extra").holdsData,
+    false,
+  );
+  assert.deepEqual(
+    pruned.blocked.map((entry) => [entry.path, entry.reason]),
+    [["parent.uv_virtual", "A Virtual column is never deleted by pruning."]],
+  );
+});
+
+test("prune never touches foreign, system, virtual, shadow columns or entities", async () => {
+  const fixture = await deployed(undefined, true);
+  const only = parseModel({
+    ...prunedModel,
+    entities: prunedModel.entities.filter((entity) => entity.name === "child"),
+  });
+  const pruned = await planSchema(
+    only,
+    mapping,
+    environment,
+    await inspectSchema(fixture.client, mapping, only),
+    { prune: true },
+  );
+  const targets = JSON.stringify(pruned.operations);
+  for (const name of [
+    "other_",
+    "createdon",
+    "uv_shadow",
+    "uv_logical",
+    "uv_virtual",
+  ])
+    assert.ok(!targets.includes(name), name);
+  assert.ok(pruned.operations.every((entry) => entry.entity === "child"));
+  assert.ok(
+    pruned.blocked.some((entry) => entry.reason.includes("mapped entity")),
+  );
+  fixture.writes.length = 0;
+  await assert.rejects(
+    applySchema(fixture.client, pruned, environment, true),
+    /blocked/,
+  );
+  assert.equal(fixture.writes.length, 0);
+  const full = await planSchema(
+    prunedModel,
+    mapping,
+    environment,
+    await inspectSchema(fixture.client, mapping, prunedModel),
+    { prune: true },
+  );
+  const virtual = full.blocked.filter((entry) =>
+    entry.path.endsWith("uv_virtual"),
+  );
+  assert.equal(virtual.length, 1);
+  assert.ok(!JSON.stringify(full.operations).includes("uv_virtual"));
+  fixture.entities.get("uv_parent").columns.pop();
+  const clean = await planSchema(
+    prunedModel,
+    mapping,
+    environment,
+    await inspectSchema(fixture.client, mapping, prunedModel),
+    { prune: true },
+  );
+  assert.deepEqual(clean.blocked, []);
+  assert.ok(
+    !/other_|createdon|uv_shadow|uv_logical/.test(
+      JSON.stringify(clean.operations),
+    ),
+  );
+  await applySchema(fixture.client, clean, environment, true);
+  assert.ok(
+    fixture.writes.every(
+      (write) =>
+        write.method === "DELETE" &&
+        !/other_|createdon|uv_shadow|uv_logical/.test(write.path),
+    ),
+  );
+  assert.ok(
+    fixture.writes.every(
+      (write) => !/^EntityDefinitions\(LogicalName='[^']+'\)$/.test(write.path),
+    ),
+  );
+});
+
+test("prune keeps changed constraints blocked", async () => {
+  const fixture = await deployed();
+  const changed = parseModel({
+    ...prunedModel,
+    entities: prunedModel.entities.map((entity) => ({
+      ...entity,
+      columns: entity.columns.map((column) =>
+        column.name === "amount" ? { ...column, precision: 9 } : column,
+      ),
+      ...(entity.name === "parent"
+        ? {
+            keys: [{ name: "by_code", columns: ["code", "name"] }],
+            columns: [
+              ...entity.columns.map((column) =>
+                column.name === "amount" ? { ...column, precision: 9 } : column,
+              ),
+              { name: "code", type: "text", nullable: false, maxLength: 20 },
+            ],
+          }
+        : {}),
+    })),
+  });
+  const pruned = await planSchema(
+    changed,
+    mapping,
+    environment,
+    await inspectSchema(fixture.client, mapping, changed),
+    { prune: true },
+  );
+  assert.ok(pruned.blocked.some((entry) => entry.path === "parent.amount"));
+  assert.ok(
+    pruned.blocked.some((entry) =>
+      entry.reason.includes("changing a key is blocked"),
+    ),
+  );
+  assert.ok(!pruned.operations.some((entry) => entry.kind === "delete-key"));
+  fixture.writes.length = 0;
+  await assert.rejects(
+    applySchema(fixture.client, pruned, environment, true),
+    /blocked/,
+  );
+  assert.equal(fixture.writes.length, 0);
+});
+
+test("prune applies key deletes before key creates and relationships before columns", async () => {
+  const fixture = await deployed();
+  const renamed = parseModel({
+    ...plannedModel,
+    entities: plannedModel.entities.map((entity) =>
+      entity.name === "parent"
+        ? { ...entity, keys: [{ name: "by_other", columns: ["code"] }] }
+        : {
+            ...entity,
+            columns: entity.columns.filter(
+              (column) => !["parent", "extra"].includes(column.name),
+            ),
+          },
+    ),
+  });
+  const pruned = await planSchema(
+    renamed,
+    mapping,
+    environment,
+    await inspectSchema(fixture.client, mapping, renamed),
+    { prune: true },
+  );
+  assert.deepEqual(pruned.blocked, []);
+  const result = await applySchema(fixture.client, pruned, environment, true);
+  assert.deepEqual(
+    fixture.writes.map((write) => `${write.method} ${write.path}`),
+    [
+      "DELETE EntityDefinitions(LogicalName='uv_parent')/Keys(00000000-0000-0000-0000-000000000001)",
+      "POST EntityDefinitions(LogicalName='uv_parent')/Keys",
+      "DELETE RelationshipDefinitions(SchemaName='uv_child_parent')",
+      "DELETE EntityDefinitions(LogicalName='uv_child')/Attributes(LogicalName='uv_extra')",
+    ],
+  );
+  assert.deepEqual(result.operations, []);
+  assert.deepEqual(result.blocked, []);
+  assert.equal(result.effect, "destructive");
+});
+
+test("prune waits for deleted metadata to disappear", async () => {
+  const fixture = await deployed({ goneLag: 3 });
+  const result = await applySchema(
+    fixture.client,
+    await planSchema(
+      prunedModel,
+      mapping,
+      environment,
+      await inspectSchema(fixture.client, mapping, prunedModel),
+      { prune: true },
+    ),
+    environment,
+    true,
+  );
+  assert.deepEqual(result.operations, []);
+  assert.ok(fixture.clock.now() > 0);
+  const stuck = await deployed({ goneLag: Number.POSITIVE_INFINITY });
+  await assert.rejects(
+    applySchema(
+      stuck.client,
+      await planSchema(
+        prunedModel,
+        mapping,
+        environment,
+        await inspectSchema(stuck.client, mapping, prunedModel),
+        { prune: true },
+      ),
+      environment,
+      true,
+    ),
+    /still listed/,
+  );
+});

@@ -153,12 +153,12 @@ Inspect normalized metadata within an explicit publisher prefix.
 
 ## schema plan
 
-Plan additive metadata changes and report blocked operations.
+Plan additive metadata changes and report blocked operations; with --prune, plan the deletion of owned structures the model no longer declares.
 
 - Effect: `read`
 - Output formats: `human` (default), `json`, `csv`
 
-`unverse schema plan [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path> --model-file <path>`
+`unverse schema plan [--config <path>] [--env <name>] [--format <human|json|csv>] --mapping-file <path> --model-file <path> [--prune]`
 
 ### Flags
 
@@ -167,6 +167,7 @@ Plan additive metadata changes and report blocked operations.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--mapping-file <path>` (required): Read the mapping JSON: prefix, solution, and optional environmentVariables and connectionReferences.
 - `--model-file <path>` (required): Read the versioned logical schema model.
+- `--prune`: Plan a destructive change that deletes owned keys, relationships and columns outside the model; entities are never deleted.
 
 ## solution list
 

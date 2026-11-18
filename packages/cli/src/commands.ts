@@ -439,7 +439,7 @@ export const resources: readonly ResourceSpec[] = [
   },
   {
     name: "schema",
-    summary: "Inspect metadata and plan additive changes.",
+    summary: "Inspect metadata and plan additive or pruning changes.",
     commands: [
       {
         name: "inspect",
@@ -455,9 +455,17 @@ export const resources: readonly ResourceSpec[] = [
         stage: "plan",
         effect: "read",
         summary:
-          "Plan additive metadata changes and report blocked operations.",
+          "Plan additive metadata changes and report blocked operations; with --prune, plan the deletion of owned structures the model no longer declares.",
         flagsets: ["target", "output", "mapping"],
-        flags: [modelFile],
+        flags: [
+          modelFile,
+          {
+            name: "--prune",
+            value: null,
+            summary:
+              "Plan a destructive change that deletes owned keys, relationships and columns outside the model; entities are never deleted.",
+          },
+        ],
         outputs: tabular,
       },
     ],

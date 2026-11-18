@@ -118,7 +118,7 @@ mutations.push(
   ["key-column-type", "core/schema.js", "if (!keyTypes.includes(column.type) &&", "if (false &&", "core", "alternate key declarations reject unsupported, optional, missing, and duplicate columns", "keys"],
   ["key-duplicate-tuple", "core/values.js", "if (tuples.size !== normalized[entity.name]?.length)", "if (false)", "core", "seed, export, and transfer reject duplicate alternate key tuples", "keys"],
   ["key-change", "core/plan.js", "else if (!sameColumns(observed.columns, columns))", "else if (false)", "dataverse", "existing keys are never changed or removed", "schema"],
-  ["key-removal", "core/plan.js", "if (observed.name.startsWith(`${mapping.prefix}_`) &&", "if (false &&", "dataverse", "existing keys are never changed or removed", "schema"],
+  ["key-removal", "core/plan.js", "return (observed.name.startsWith(`${mapping.prefix}_`) &&", "return (false &&", "dataverse", "existing keys are never changed or removed", "schema"],
   ["key-index-status", "core/plan.js", 'else if (observed.indexStatus !== "Active")', "else if (false)", "dataverse", "a key whose index is not active by the deadline is reported unverified", "schema"],
   ["key-visibility", "dataverse/schema.js", "await awaitVisible(client, schemaName, listing);", "", "dataverse", "apply reports a created key that never becomes visible", "schema"],
   ["key-index-wait", "dataverse/schema.js", 'status === "Active" || status === "Failed"', "true", "dataverse", "alternate keys are created after their columns and wait for an active index", "schema"],
@@ -188,6 +188,15 @@ mutations.push(
   ["access-assigned-missing", "dataverse/access.js", "assigned.has(roleId)", "false", "dataverse", "separates satisfied roles from missing ones", "access"],
   ["access-secret", "dataverse/discovery.js", "type === 100000005", "false", "dataverse", "rejects unset, secret, and unknown team variables", "access"],
   ["access-stale", "dataverse/access.js", "canonical(expected) !== canonical(input)", "false", "dataverse", "access apply rejects a stale plan before any write", "access"],
+);
+
+mutations.push(
+  ["prune-ownership", "core/plan.js", "column.name.startsWith(`${mapping.prefix}_`) &&", "", "dataverse", "prune never touches foreign, system, virtual, shadow columns or entities", "schema"],
+  ["prune-entity", "core/plan.js", 'blocked.push({\n                path: existing.name,\n                reason: "Removing an existing mapped entity is blocked.",\n            });', 'operations.push({ kind: "delete-column", entity: existing.name, column: existing.name });', "dataverse", "prune never touches foreign, system, virtual, shadow columns or entities", "schema"],
+  ["prune-key-order", "dataverse/schema.js", "if (operation.kind === kind)", 'if (kind === "delete-key" ? false : operation.kind === kind || (kind === "delete-relationship" && operation.kind === "delete-key"))', "dataverse", "prune applies key deletes before key creates and relationships before columns", "schema"],
+  ["prune-gone-wait", "dataverse/schema.js", "async () => ((await stillListed()) ? undefined : true)", "async () => true", "dataverse", "prune waits for deleted metadata to disappear", "schema"],
+  ["prune-gone-deadline", "dataverse/schema.js", "if (gone === undefined)", "if (false)", "dataverse", "prune waits for deleted metadata to disappear", "schema"],
+  ["prune-effect", "core/plan.js", 'effect: prune ? "destructive" : "write",', 'effect: "write",', "cli", "a prune plan is destructive and applies only with --destructive"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

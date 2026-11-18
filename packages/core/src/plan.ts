@@ -43,6 +43,12 @@ export interface ObservedKey {
   readonly indexStatus: string;
 }
 
+export interface ObservedRelationship {
+  readonly name: string;
+  readonly lookup: string;
+  readonly target: string;
+}
+
 export interface ObservedEntity {
   readonly name: string;
   readonly metadataId: string;
@@ -50,6 +56,7 @@ export interface ObservedEntity {
   readonly primaryName: string;
   readonly columns: readonly ObservedColumn[];
   readonly keys: readonly ObservedKey[];
+  readonly relationships: readonly ObservedRelationship[];
 }
 
 export interface SchemaSnapshot {
@@ -81,8 +88,30 @@ export type SchemaOperation =
       readonly entity: string;
       readonly key: string;
     }
+  | {
+      readonly kind: "delete-key";
+      readonly entity: string;
+      readonly key: string;
+    }
+  | {
+      readonly kind: "delete-relationship";
+      readonly entity: string;
+      readonly relationship: string;
+      readonly column: string;
+    }
+  | {
+      readonly kind: "delete-column";
+      readonly entity: string;
+      readonly column: string;
+      readonly holdsData?: boolean | "unknown";
+      readonly evidence?: string;
+    }
   | SolutionComponentOperation
   | SecurityRoleOperation;
+
+export interface PlanOptions {
+  readonly prune?: boolean;
+}
 
 export interface BlockedChange {
   readonly path: string;
@@ -114,8 +143,12 @@ export async function planSchema(
   mapping: DataverseMapping,
   environment: SchemaEnvironment,
   snapshot: SchemaSnapshot,
+  { prune = false }: PlanOptions = {},
 ): Promise<SchemaPlan> {
   const operations: SchemaOperation[] = [];
+  const keyDeletions: SchemaOperation[] = [];
+  const relationshipDeletions: SchemaOperation[] = [];
+  const columnDeletions: SchemaOperation[] = [];
   const blocked: BlockedChange[] = [];
   const keyOperations: SchemaOperation[] = [];
   const unverified: { path: string; reason: string }[] = [];
@@ -195,20 +228,47 @@ export async function planSchema(
             });
       }
     }
+    const undeclaredLookups = prune
+      ? ownedRelationshipsOutsideModel(mapping, entity, existing)
+      : [];
     for (const column of ownedColumnsOutsideModel(
       mapping,
       entity,
       existing?.columns ?? [],
-    ))
-      blocked.push({
-        path: `${entity.name}.${column.name}`,
-        reason: "Removing an existing custom column is blocked.",
-        ...(column.data === undefined
+    )) {
+      const relationship = undeclaredLookups.find(
+        (value) => value.lookup === column.name,
+      );
+      if (relationship !== undefined) continue;
+      const data =
+        column.data === undefined
           ? {}
           : {
               holdsData: column.data.holdsData,
               evidence: column.data.evidence,
-            }),
+            };
+      if (prune && deletableColumn(column))
+        columnDeletions.push({
+          kind: "delete-column",
+          entity: entity.name,
+          column: column.name,
+          ...data,
+        });
+      else
+        blocked.push({
+          path: `${entity.name}.${column.name}`,
+          reason: prune
+            ? `A ${column.providerType} column is never deleted by pruning.`
+            : "Removing an existing custom column is blocked.",
+          ...data,
+        });
+    }
+    for (const relationship of undeclaredLookups)
+      relationshipDeletions.push({
+        kind: "delete-relationship",
+        entity: entity.name,
+        relationship: relationship.name,
+        column: relationship.lookup,
       });
     for (const key of entity.keys ?? []) {
       const path = `${entity.name}.keys.${key.name}`;
@@ -226,7 +286,10 @@ export async function planSchema(
       const twin = existing?.keys.find(
         (value) => sameColumns(value.columns, columns) && value !== observed,
       );
-      if (twin !== undefined)
+      if (
+        twin !== undefined &&
+        !(prune && undeclaredKey(mapping, entity, twin))
+      )
         blocked.push({
           path,
           reason: `Another key (${twin.name}) already uses these columns; renaming a key is blocked.`,
@@ -249,14 +312,19 @@ export async function planSchema(
         });
     }
     for (const observed of existing?.keys ?? [])
-      if (
-        observed.name.startsWith(`${mapping.prefix}_`) &&
-        !entity.keys?.some((key) => physicalKey(mapping, key) === observed.name)
-      )
-        blocked.push({
-          path: `${entity.name}.keys.${observed.name}`,
-          reason: "Removing an existing custom key is blocked.",
-        });
+      if (undeclaredKey(mapping, entity, observed)) {
+        if (prune)
+          keyDeletions.push({
+            kind: "delete-key",
+            entity: entity.name,
+            key: observed.name,
+          });
+        else
+          blocked.push({
+            path: `${entity.name}.keys.${observed.name}`,
+            reason: "Removing an existing custom key is blocked.",
+          });
+      }
   }
   for (const existing of snapshot.entities) {
     if (
@@ -291,18 +359,26 @@ export async function planSchema(
   return {
     planVersion: 1,
     kind: "schema",
-    effect: "write",
+    effect: prune ? "destructive" : "write",
     provider: "dataverse",
     environment,
     mapping,
     model,
     observedFingerprint: await fingerprint(snapshot),
-    operations: [...operations, ...keyOperations],
+    operations: [
+      ...keyDeletions,
+      ...operations,
+      ...keyOperations,
+      ...relationshipDeletions,
+      ...columnDeletions,
+    ],
     blocked,
     unverified,
     limitations: [
       "RequiredLevel is application-level in Dataverse, not a server-side NOT NULL guarantee.",
-      "Only additive metadata changes are supported; unknown or destructive changes are blocked.",
+      prune
+        ? "Owned keys, relationships and columns outside the model are deleted; entities, changed constraints and structures outside the prefix are never touched."
+        : "Only additive metadata changes are supported; unknown or destructive changes are blocked.",
     ],
   };
 }
@@ -365,6 +441,41 @@ export function ownedColumnsOutsideModel(
       column.name.startsWith(`${mapping.prefix}_`) &&
       !entity.columns.some(
         (wanted) => physicalColumn(mapping, entity, wanted) === column.name,
+      ),
+  );
+}
+
+function undeclaredKey(
+  mapping: DataverseMapping,
+  entity: Entity,
+  observed: ObservedKey,
+): boolean {
+  return (
+    observed.name.startsWith(`${mapping.prefix}_`) &&
+    !entity.keys?.some((key) => physicalKey(mapping, key) === observed.name)
+  );
+}
+
+const lookupTypes = ["Lookup", "Customer", "Owner", "Virtual"];
+
+function deletableColumn(column: ObservedColumn): boolean {
+  return !lookupTypes.includes(column.providerType);
+}
+
+function ownedRelationshipsOutsideModel(
+  mapping: DataverseMapping,
+  entity: Entity,
+  existing: ObservedEntity | undefined,
+): ObservedRelationship[] {
+  return (existing?.relationships ?? []).filter(
+    (relationship) =>
+      relationship.name.startsWith(`${mapping.prefix}_`) &&
+      relationship.lookup.startsWith(`${mapping.prefix}_`) &&
+      !entity.columns.some(
+        (column) =>
+          (column.references !== undefined ||
+            column.externalReference !== undefined) &&
+          physicalColumn(mapping, entity, column) === relationship.lookup,
       ),
   );
 }

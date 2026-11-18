@@ -24,7 +24,9 @@ checks for automation.
 It does not provide a web application, long-running server, complete Power
 Apps replacement, continuous synchronization, arbitrary SQL translation,
 automatic impersonation, role assignment to users, effective access checks, or
-a complete Dataverse migration. Declarative provisioning and verified
+a complete Dataverse migration. Schema changes are additive; the only
+destructive schema change is an explicit `schema plan --prune` applied with
+`--destructive` (§14), and entities are never deleted. Declarative provisioning and verified
 PostgreSQL transfer are later milestones. Security role provisioning (§14)
 and assigning existing roles to existing teams through a reviewed plan (§21)
 are in scope; assigning a role to a user comes later.
@@ -365,7 +367,7 @@ blocked removals and changed constraints. A missing key is a `create-key`
 operation, listed after every column and relationship operation. An existing
 key with the same columns is satisfied. A key with other columns, a key on the
 same columns under another name, and a prefix-owned key absent from the model
-are blocked; keys are never changed or deleted. A satisfied key whose index
+are blocked; keys are never changed, and an undeclared owned key is deleted only by a `--prune` plan. A satisfied key whose index
 status is not `Active` is listed under `unverified`, not as done.
 
 For every blocked removal of a prefix-owned column the plan records
@@ -376,7 +378,7 @@ authenticated identity only, since row-level security can hide rows. A column
 type that cannot be filtered (multiline, lookups, files) is not read and is
 `unknown`. A permission or service failure on the read is `unknown` with the
 error as evidence, never `false`; an authentication failure stops the
-command. Nothing is removed. The read needs the model, so `schema inspect`
+command. Without `--prune` nothing is removed. The read needs the model, so `schema inspect`
 does not run it; `schema plan` and `apply` of a schema plan do, and the result is part of
 the compared plan. Dataverse RequiredLevel is an
 application-level rule, not an SQL NOT NULL guarantee. That limitation appears
@@ -387,9 +389,41 @@ fingerprints it carries `kind` (`schema` or `data`) and `effect` (`write` or
 `destructive`). Both are part of what apply recomputes and compares, so a
 plan whose kind or effect was edited is rejected as modified. Schema plans and
 data plans (seed and transfer, §16) are the two kinds; every plan written today
-has effect `write`. `effect: "destructive"` is reserved for plans that remove
-or overwrite: `apply` refuses such a plan unless the invocation also passes
-`--destructive`; the check runs before the first request.
+has effect `write`, except a schema plan made with `--prune`, which has effect
+`destructive`. `apply` refuses a destructive plan unless the invocation also
+passes `--destructive`; the check runs before the first request.
+
+`schema plan --prune` makes the model authoritative for what the publisher
+prefix owns. It changes three blocked removals into operations and nothing
+else: `delete-key` (a prefix-owned key the model does not declare),
+`delete-relationship` (a prefix-owned 1:N relationship whose lookup is a
+prefix-owned column on a modeled entity and that the model does not declare;
+Dataverse deletes the lookup column with it), and `delete-column` (a
+prefix-owned scalar column the model does not declare, carrying its
+`holdsData` mark and `evidence`; data is shown, it does not block). A key
+renamed in the model is a `delete-key` plus a `create-key`: with `--prune` a
+prefix-owned undeclared key on the same columns no longer blocks the new
+key. Never deleted, with or without `--prune`: entities (a mapped entity absent
+from the model stays blocked), anything outside the prefix, system columns,
+logical and lookup-shadow columns, and virtual, lookup, customer, and owner
+columns that no owned relationship explains (these are blocked). Changed
+constraints (type, length, precision, choice options, keys of the same name with
+other columns) stay blocked, and a plan with any blocked entry is not applied.
+Observation adds each modeled entity's `ManyToOneRelationships` (schema name,
+referencing attribute, referenced entity). Apply recomputes the plan with
+pruning chosen by the plan's own `effect`, so an edited effect is a stale plan.
+
+Apply orders a destructive plan as: delete undeclared keys (Dataverse cannot
+keep conflicting keys on the same columns), the additive creates and key
+creates, delete relationships, delete columns. The Web API calls are
+`DELETE EntityDefinitions(LogicalName='…')/Keys(<MetadataId>)` (the id is read
+from the key list), `DELETE RelationshipDefinitions(SchemaName='…')`, and
+`DELETE EntityDefinitions(LogicalName='…')/Attributes(LogicalName='…')`; the
+Microsoft Learn Web API documentation names a relationship and an attribute
+by `SchemaName` and `LogicalName` alternate keys, and a relationship
+deletion removes its lookup attribute. After each delete apply polls every
+two seconds, up to 120 seconds, until the key, relationship, or attribute
+list no longer contains the object, then stops with a `service` error.
 
 `unverse apply <plan-file> --env <name> --confirm` is the only way to execute
 a plan. It reads the plan (the bare plan or the result envelope that
@@ -406,7 +440,7 @@ environment. It re-inspects metadata, deterministically rebuilds the plan,
 compares the whole reviewed document, checks the solution's publisher, and
 rejects stale, foreign, modified, or blocked plans before writes. It creates
 entities, adds supported columns, adds choice options, creates 1:N
-relationships, and then creates alternate keys only. It does not remove structures or retry writes. Requests are not an atomic transaction.
+relationships, and then creates alternate keys. A destructive plan also deletes keys, relationships, and columns as described above. Apply does not retry writes. Requests are not an atomic transaction.
 
 Dataverse metadata becomes readable some time after a write. After creating an
 entity, column, relationship, or key, apply polls every two seconds until
@@ -764,7 +798,7 @@ choices for values, and one document tools can read. Each command declares:
   are `write`; `verify` is `read`. The effect of an `apply` invocation is the
   larger of the command's and the plan's: a plan with `effect: "destructive"`
   needs the `destructive` flagset's `--destructive` and fails with exit 2
-  before any request without it. No plan is destructive yet. A command that is
+  before any request without it. A schema plan made with `--prune` is destructive. A command that is
   not `read` carries the `write` flagset, whose `--confirm` is required.
 - flagsets: `config` (`--config`), `target` (`--env`, plus `--config`; `--env`
   may come from `UNVERSE_ENV`), `output` (`--format`), `write` (`--confirm`),

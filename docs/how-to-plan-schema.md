@@ -32,7 +32,7 @@ supported types and a 1:N relationship. See
 2. Read `data.operations`, `data.blocked`, and `data.limitations` in `plan.json`.
    Unsupported types are rejected rather than removed. Changed types, changed
    constraints, removed fields, removed tables, and unknown definitions cannot
-   reach the write transport.
+   reach the write transport, unless step 6 applies.
 
 3. To require uniqueness, declare alternate keys on an entity. `code` and
    `by_code` are placeholders:
@@ -57,7 +57,7 @@ supported types and a 1:N relationship. See
    ```
 
    A key that exists with other columns, or that the model no longer lists, is
-   in `blocked`. Keys are never changed or deleted. A key that exists but whose
+   in `blocked`. Keys are never changed; step 6 deletes an undeclared key. A key that exists but whose
    index is not yet `Active` is in `unverified`.
 
 4. To extend a local choice, add the new option to its `options` list. Against
@@ -75,7 +75,7 @@ supported types and a 1:N relationship. See
    so label changes, value changes, and removals are blocked.
 
 5. If Dataverse has custom columns under your prefix that the model no longer
-   lists, they are blocked, never removed. For each, the plan reads at most one
+   lists, they are blocked, never removed (step 6 changes this). For each, the plan reads at most one
    row to tell you whether the column holds data. Against the synthetic fixture,
    with `amount` holding a value, `day` empty, and `count` unreadable by the
    application user:
@@ -107,7 +107,52 @@ supported types and a 1:N relationship. See
    no rows; row-level security can hide rows from it. Multiline text and
    other columns that cannot be filtered are always `"unknown"`.
 
-6. Optionally declare solution components in the same `mapping.json` (see
+6. To make the model authoritative for what your prefix owns, add `--prune`.
+   The plan is then destructive: its `effect` is `destructive`, and the
+   removals that step 5 reports as blocked become operations. Against the
+   synthetic fixture where Dataverse still had a `code` column with a
+   value, the key `by_code` on it, and a `parent` lookup on `child` that the
+   model no longer lists:
+
+   ```sh
+   unverse schema plan --env dev --mapping-file mapping.json --model-file schema.json --prune --format json > prune-plan.json
+   ```
+
+   ```json
+   "effect": "destructive",
+   "operations": [
+     { "kind": "delete-key", "entity": "parent", "key": "uv_by_code" },
+     { "kind": "delete-relationship", "entity": "child", "relationship": "uv_child_parent", "column": "uv_parent" },
+     {
+       "kind": "delete-column",
+       "entity": "parent",
+       "column": "uv_code",
+       "holdsData": true,
+       "evidence": "Read uv_parents?$select=uv_parentid&$filter=uv_code ne null&$top=1 returned a row for this identity."
+     }
+   ],
+   "blocked": []
+   ```
+
+   The names in the three delete operations are physical names, as Dataverse
+   lists them. Dataverse deletes the lookup column together with its
+   relationship. Data does not block a column deletion: `holdsData` and
+   `evidence` are shown so you can review them, and a deleted column loses its
+   values. Without `--prune` the same fixture gives `effect: "write"`, no
+   operations, and the three removals in `blocked`.
+
+   Pruning deletes only structures whose name starts with your prefix: keys
+   the model does not declare, 1:N relationships whose lookup is on a modeled
+   entity and that the model does not declare, and scalar columns the model
+   does not declare. It never deletes an entity, a system, virtual, or
+   lookup-shadow column, or anything outside the prefix. Changed types,
+   lengths, precisions, and keys with the same name stay in `blocked`, so a
+   plan that has any blocked entry still cannot be applied. A key renamed in
+   the model is a `delete-key` for the old name and a `create-key` for the
+   new one. [Apply the destructive plan](how-to-apply-schema.md) only with
+   `--destructive`.
+
+7. Optionally declare solution components in the same `mapping.json` (see
    [the design](design.md#14-schema-model-and-safety)): text environment
    variable definitions (`environmentVariables`) and connection references
    (`connectionReferences`):
@@ -158,7 +203,7 @@ supported types and a 1:N relationship. See
    connector is blocked. Variable values and connections are never read or
    changed.
 
-7. Optionally declare security roles in the mapping document under
+8. Optionally declare security roles in the mapping document under
    `securityRoles` (see [the design](design.md#14-schema-model-and-safety)).
    `sr-Example-Users` is a placeholder role name and `parent` a modeled
    entity:

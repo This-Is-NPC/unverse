@@ -702,6 +702,7 @@ export async function runCli(
               mapping,
               schemaEnvironment,
               await inspectSchema(client, mapping, model),
+              { prune: flags.has("--prune") },
             )
           : mapping !== undefined
             ? await inspectSchema(client, mapping)
@@ -718,7 +719,7 @@ export async function runCli(
           coverage: {
             complete: true,
             limitations: [
-              "Only additive changes are supported. Dataverse required fields are application-level, not a server-side NOT NULL guarantee.",
+              "Without --prune only additive changes are supported. Dataverse required fields are application-level, not a server-side NOT NULL guarantee.",
             ],
           },
         },

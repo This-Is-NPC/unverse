@@ -42,6 +42,7 @@ export const model = parseModel({
 export function schemaFixture({
   lag = 0,
   keyLag = lag,
+  goneLag = 0,
   indexLag = 0,
   rows = {},
   denied = [],
@@ -52,6 +53,7 @@ export function schemaFixture({
   const probes = [];
   const hidden = new Map();
   let time = 0;
+  let keyCount = 0;
   const clock = {
     now: () => time,
     wait: async (milliseconds) => {
@@ -60,11 +62,16 @@ export function schemaFixture({
   };
   const hide = (object) => hidden.set(object, lag);
   const indexing = new Map();
-  const listed = (object) => (hidden.get(object) ?? 0) === 0;
+  const doomed = new Map();
+  const listed = (object) =>
+    (hidden.get(object) ?? 0) === 0 && doomed.get(object) !== 0;
   const age = (object) => {
     const remaining = hidden.get(object) ?? 0;
     if (remaining > 0) hidden.set(object, remaining - 1);
+    if ((doomed.get(object) ?? 0) > 0)
+      doomed.set(object, doomed.get(object) - 1);
   };
+  const remove = (object) => doomed.set(object, goneLag);
   const response = (body) => ({
     status: 200,
     headers: {},
@@ -137,6 +144,13 @@ export function schemaFixture({
             .map(() => ({ [url.searchParams.get("$select")]: "row" })),
         });
       }
+      if (path.endsWith("/ManyToOneRelationships")) {
+        const entity = entities.get(/LogicalName='([^']+)'/.exec(path)?.[1]);
+        const shown = (entity?.relationships ?? []).filter(listed);
+        for (const relationship of entity?.relationships ?? [])
+          age(relationship);
+        return response({ value: shown });
+      }
       if (path.endsWith("/Keys")) {
         const name = /LogicalName='([^']+)'/.exec(path)?.[1];
         const entity = entities.get(name);
@@ -169,6 +183,32 @@ export function schemaFixture({
       );
       const body = JSON.parse(json ?? "{}");
       writes.push({ method, path, body, headers });
+      if (method === "DELETE") {
+        const owner = entities.get(/LogicalName='([^']+)'/.exec(path)?.[1]);
+        const named = /\((?:LogicalName|SchemaName)='([^']+)'\)$/.exec(
+          path,
+        )?.[1];
+        const identifier = /\/Keys\(([^)]+)\)$/.exec(path)?.[1];
+        if (identifier !== undefined)
+          remove(owner.keys.find((key) => key.MetadataId === identifier));
+        else if (path.startsWith("RelationshipDefinitions")) {
+          for (const entity of entities.values()) {
+            const relationship = entity.relationships.find(
+              (value) => value.SchemaName === named,
+            );
+            if (relationship === undefined) continue;
+            remove(relationship);
+            remove(
+              entity.columns.find(
+                (column) =>
+                  column.LogicalName === relationship.ReferencingAttribute,
+              ),
+            );
+          }
+        } else
+          remove(owner.columns.find((column) => column.LogicalName === named));
+        return { status: 204, headers: {}, body: "" };
+      }
       const target =
         path === "RelationshipDefinitions"
           ? [body.ReferencedEntity, body.ReferencingEntity]
@@ -203,6 +243,7 @@ export function schemaFixture({
             ...body.Attributes.map(attribute),
           ],
           keys: [],
+          relationships: [],
         };
         entities.set(body.SchemaName, entity);
         hide(entity);
@@ -218,6 +259,7 @@ export function schemaFixture({
         const key = {
           SchemaName: body.SchemaName,
           KeyAttributes: body.KeyAttributes,
+          MetadataId: `00000000-0000-0000-0000-${String(++keyCount).padStart(12, "0")}`,
         };
         entities.get(/LogicalName='([^']+)'/.exec(path)?.[1]).keys.push(key);
         hidden.set(key, keyLag);
@@ -231,6 +273,11 @@ export function schemaFixture({
         };
         entities.get(body.ReferencingEntity).columns.push(column);
         hide(column);
+        entities.get(body.ReferencingEntity).relationships.push({
+          SchemaName: body.SchemaName,
+          ReferencingAttribute: body.Lookup.SchemaName,
+          ReferencedEntity: body.ReferencedEntity,
+        });
       } else {
         const name = /LogicalName='([^']+)'/.exec(path)?.[1];
         const column = attribute(body);

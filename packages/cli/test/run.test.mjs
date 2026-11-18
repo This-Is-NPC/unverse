@@ -552,6 +552,85 @@ test("apply refuses a destructive plan without --destructive before any request"
   assert.equal(requests, 1);
 });
 
+test("a prune plan is destructive and applies only with --destructive", async () => {
+  const schema = schemaFixture();
+  const output = [];
+  const reduced = {
+    ...schemaModel,
+    entities: schemaModel.entities.map((entity) => ({
+      ...entity,
+      columns: entity.columns.filter((column) => column.name !== "amount"),
+    })),
+  };
+  const documents = {
+    [discoveredConfig]: validConfig,
+    "model.json": JSON.stringify(schemaModel),
+    "reduced.json": JSON.stringify(reduced),
+    "mapping.json": JSON.stringify(mappingDocument),
+  };
+  const base = {
+    ...runtime(() => validConfig, output),
+    readFile: async (path) => documents[path],
+    connect: () => schema.client,
+  };
+  const plan = (model, ...extra) =>
+    runCli(
+      [
+        "schema",
+        "plan",
+        "--env",
+        "dev",
+        "--mapping-file",
+        "mapping.json",
+        "--model-file",
+        model,
+        "--format",
+        "json",
+        ...extra,
+      ],
+      base,
+    );
+  const apply = (...extra) =>
+    runCli(
+      [
+        "apply",
+        "plan.json",
+        "--env",
+        "dev",
+        "--confirm",
+        "--format",
+        "json",
+        ...extra,
+      ],
+      base,
+    );
+  await plan("model.json");
+  documents["plan.json"] = JSON.stringify(JSON.parse(output[0]).data);
+  assert.equal(await apply(), 0);
+  schema.writes.length = 0;
+  await plan("reduced.json");
+  assert.equal(JSON.parse(output[2]).data.effect, "write");
+  assert.equal(JSON.parse(output[2]).data.operations.length, 0);
+  await plan("reduced.json", "--prune");
+  const pruned = JSON.parse(output[3]).data;
+  assert.equal(pruned.effect, "destructive");
+  assert.deepEqual(
+    pruned.operations.map((entry) => [entry.kind, entry.column]),
+    [["delete-column", "uv_amount"]],
+  );
+  documents["plan.json"] = JSON.stringify(pruned);
+  assert.equal(await apply(), 2);
+  assert.equal(schema.writes.length, 0);
+  assert.equal(await apply("--destructive"), 0);
+  assert.deepEqual(
+    schema.writes.map((write) => `${write.method} ${write.path}`),
+    [
+      "DELETE EntityDefinitions(LogicalName='uv_parent')/Attributes(LogicalName='uv_amount')",
+    ],
+  );
+  assert.deepEqual(JSON.parse(output.at(-1)).data.operations, []);
+});
+
 test("verify reports an unsatisfied plan with exit 1 and a satisfied one with exit 0 without writing", async () => {
   const schema = schemaFixture();
   const output = [];

@@ -40,6 +40,7 @@ export {
   type ObservedColumn,
   type ObservedEntity,
   type ObservedKey,
+  type ObservedRelationship,
   ownedColumnsOutsideModel,
   planSchema,
   type SchemaEnvironment,

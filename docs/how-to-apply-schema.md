@@ -27,9 +27,10 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
    ```
 
    `kind` is `schema` or `data`; `apply` uses it to pick the executor, so you
-   never name one. `effect` is `write` for every plan today. A plan with effect
-   `destructive` is applied only with `--destructive` added to the command in
-   step 2; without it the command exits 2 before any request.
+   never name one. `effect` is `write` for a plan made without `--prune`. A
+   plan made with [`schema plan --prune`](how-to-plan-schema.md) has effect
+   `destructive`: it is applied only with `--destructive` added to the command
+   in step 2; without it the command exits 2 before any request.
 
 2. Apply with explicit confirmation. `plan.json` is the plan file or the JSON
    result of `schema plan`; `dev` is the profile you select again here:
@@ -42,6 +43,18 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
    stale fingerprint, modified plan, or blocked operation fails before writes.
    The library also checks the authenticated client's endpoint and WhoAmI
    organization; it does not trust only the caller-provided context labels.
+
+   A destructive plan deletes owned keys, then runs the additive operations,
+   then deletes relationships and last columns. After each deletion apply
+   polls up to 120 seconds until the object is no longer listed. Deleted
+   columns lose their values; read `holdsData` in each `delete-column`
+   operation before you approve. Against the synthetic fixture, applying a
+   prune plan without `--destructive` exited 2 and issued no write; with it,
+   apply exited 0 and the returned `operations` list was empty:
+
+   ```sh
+   unverse apply prune-plan.json --env dev --confirm --destructive --format json
+   ```
 
 3. Inspect the returned plan. In the dedicated DEV fixture, creation and an
    additive field addition each produced empty `operations` and `blocked`
@@ -84,6 +97,13 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
    sends only reads, so it is safe in CI.
 
 ## What can go wrong
+
+A deleted key, relationship, or column cannot be restored by Unverse. If a
+deleted object is still listed after 120 seconds, apply stops with exit 5 and
+issues no further writes; inspect and create a fresh plan. Dataverse refuses a
+deletion that other components depend on (for example a form or view using
+the column); the earlier deletions stay in place and apply stops with the
+service error. A plan with any blocked entry is not applied at all.
 
 After each creation, apply waits up to 120 seconds for the created metadata
 to be listed before it creates anything that depends on it. If it never
