@@ -315,3 +315,162 @@ export function solutionComponentFixture() {
   };
   return { ...state, definitions, references, reads };
 }
+
+const accesses = [
+  "Create",
+  "Read",
+  "Write",
+  "Delete",
+  "Append",
+  "AppendTo",
+  "Assign",
+  "Share",
+];
+const rootUnit = "00000000-0000-0000-0000-00000000000a";
+const childUnit = "00000000-0000-0000-0000-00000000000b";
+const identifier = (number) =>
+  `00000000-0000-0000-0000-${String(number).padStart(12, "0")}`;
+
+export function securityRoleFixture({
+  privilegeLag = 0,
+  known = [],
+  options,
+} = {}) {
+  const state = schemaFixture(options);
+  const units = [
+    { businessunitid: rootUnit, _parentbusinessunitid_value: null },
+    { businessunitid: childUnit, _parentbusinessunitid_value: rootUnit },
+  ];
+  const roles = [];
+  const privileges = new Map();
+  const grants = new Map();
+  const hiddenPrivileges = new Map();
+  const reads = [];
+  let counter = 100;
+  const addPrivilege = (name, lag = 0) => {
+    const id = identifier(counter++);
+    privileges.set(id, name);
+    hiddenPrivileges.set(id, lag);
+    return id;
+  };
+  for (const name of known) addPrivilege(name);
+  const { get, request } = state.client.transport;
+  const respond = (value) => ({
+    status: 200,
+    headers: {},
+    body: JSON.stringify({ value }),
+  });
+  const pathOf = (url) =>
+    decodeURIComponent(new URL(url).pathname).replace("/api/data/v9.2/", "");
+  state.client.transport.get = async (url, headers) => {
+    const path = pathOf(url);
+    const filter = new URL(url).searchParams.get("$filter") ?? "";
+    if (path === "businessunits") {
+      reads.push(url);
+      return respond(
+        units.filter((unit) => unit._parentbusinessunitid_value === null),
+      );
+    }
+    if (path === "roles") {
+      reads.push(url);
+      const name = /name eq '((?:[^']|'')*)'/
+        .exec(filter)?.[1]
+        ?.replaceAll("''", "'");
+      const unit = /_businessunitid_value eq ([\da-f-]+)/.exec(filter)?.[1];
+      return respond(
+        roles.filter(
+          (role) =>
+            role.name === name &&
+            (unit === undefined || role._businessunitid_value === unit),
+        ),
+      );
+    }
+    if (path === "privileges") {
+      reads.push(url);
+      const names = [...filter.matchAll(/name eq '([^']+)'/g)].map(
+        (match) => match[1],
+      );
+      const rows = [...privileges]
+        .filter(([, name]) => names.includes(name))
+        .map(([privilegeid, name]) => ({ privilegeid, name }));
+      const visible = rows.filter(
+        ({ privilegeid }) => (hiddenPrivileges.get(privilegeid) ?? 0) === 0,
+      );
+      for (const { privilegeid } of rows) {
+        const remaining = hiddenPrivileges.get(privilegeid) ?? 0;
+        if (remaining > 0) hiddenPrivileges.set(privilegeid, remaining - 1);
+      }
+      return respond(visible);
+    }
+    if (path === "roleprivilegescollection") {
+      reads.push(url);
+      const role = /roleid eq ([\da-f-]+)/.exec(filter)?.[1];
+      return respond(
+        [...(grants.get(role) ?? [])].map(([privilegeid, mask]) => ({
+          privilegeid,
+          privilegedepthmask: mask,
+        })),
+      );
+    }
+    return get(url, headers);
+  };
+  state.client.transport.request = async (method, url, headers, json) => {
+    const path = pathOf(url);
+    if (path === "roles") {
+      const body = JSON.parse(json);
+      state.writes.push({ method, path, body, headers });
+      roles.push({
+        roleid: identifier(counter++),
+        name: body.name,
+        _businessunitid_value: /\(([\da-f-]+)\)/.exec(
+          body["businessunitid@odata.bind"],
+        )?.[1],
+      });
+      return { status: 204, headers: {}, body: "" };
+    }
+    const added =
+      /^roles\(([\da-f-]+)\)\/Microsoft\.Dynamics\.CRM\.(\w+)$/.exec(path);
+    if (added !== null) {
+      const body = JSON.parse(json);
+      state.writes.push({ method, path, body, headers });
+      if (added[2] === "AddPrivilegesRole") {
+        const granted = grants.get(added[1]) ?? new Map();
+        grants.set(added[1], granted);
+        for (const privilege of body.Privileges)
+          granted.set(
+            privilege.PrivilegeId,
+            1 << ["Basic", "Local", "Deep", "Global"].indexOf(privilege.Depth),
+          );
+      }
+      return { status: 204, headers: {}, body: "" };
+    }
+    const response = await request(method, url, headers, json);
+    if (path === "EntityDefinitions") {
+      const table = JSON.parse(json).SchemaName;
+      for (const access of accesses)
+        addPrivilege(`prv${access}${table}`, privilegeLag);
+    }
+    return response;
+  };
+  return {
+    ...state,
+    roles,
+    grants,
+    privileges,
+    reads,
+    rootUnit,
+    childUnit,
+    addPrivilege,
+    addRole: (name, unit = rootUnit) => {
+      const roleid = identifier(counter++);
+      roles.push({ roleid, name, _businessunitid_value: unit });
+      return roleid;
+    },
+    grant: (roleid, name, depth) => {
+      const id = [...privileges].find(([, value]) => value === name)?.[0];
+      const granted = grants.get(roleid) ?? new Map();
+      grants.set(roleid, granted);
+      granted.set(id, 1 << ["basic", "local", "deep", "global"].indexOf(depth));
+    },
+  };
+}

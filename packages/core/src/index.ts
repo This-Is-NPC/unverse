@@ -75,6 +75,17 @@ export {
   SchemaError,
   type SchemaModel,
 } from "./schema.js";
+export {
+  type Depth,
+  declaredPrivileges,
+  depthRank,
+  depths,
+  isSecurityRoleOperation,
+  type ObservedSecurityRoles,
+  type SecurityRole,
+  type SecurityRoleOperation,
+  type SecurityRoles,
+} from "./security-roles.js";
 export { applyDataPolicy, buildSeed } from "./seed.js";
 export {
   type ConnectionReference,

@@ -23,9 +23,10 @@ checks for automation.
 
 It does not provide a web application, long-running server, complete Power
 Apps replacement, continuous synchronization, arbitrary SQL translation,
-automatic impersonation, role modification, or a complete Dataverse
-migration. Declarative provisioning and verified PostgreSQL transfer are
-later milestones.
+automatic impersonation, role assignment, effective access checks, or a
+complete Dataverse migration. Declarative provisioning and verified
+PostgreSQL transfer are later milestones. Security role provisioning (§14)
+is in scope; assigning a role to a user or team comes later.
 
 ## 2. Users and questions
 
@@ -466,6 +467,53 @@ connection, treats one with the same connector as satisfied without reading its
 connection, and blocks one with a different connector. Connections are never
 created or bound. Apply creates both components with the solution header in
 the same guarded run as the schema operations.
+
+Security roles are declared in the mapping document too, under
+`securityRoles`, and are provisioned additively in the mapped solution:
+
+```json
+{
+  "securityRoles": [
+    {
+      "name": "sr-Example-Users",
+      "preset": "code-app-base",
+      "privileges": { "prvReadAccount": "global" },
+      "tables": {
+        "parent": { "read": "global", "write": "global", "appendTo": "global" }
+      }
+    }
+  ]
+}
+```
+
+Role names are unique ignoring case. Depths are `basic`, `local`, `deep` and
+`global`. `tables` keys are modeled entity names; the accesses `create`,
+`read`, `write`, `delete`, `append`, `appendTo`, `assign` and `share` become
+the privileges `prv<Access><SchemaName>` of the mapped table (`parent` with
+`read` becomes `prvReaduv_parent`). Unverse creates modeled tables organization-owned, and
+Dataverse grants privileges on such tables only at organization level, so a
+`tables` depth other than `global` is rejected. `privileges` lists full privilege names
+for external and system tables. The preset `code-app-base` expands to the
+base privileges a Code App user needs to open the app and resolve their own
+access. Preset, `privileges` and `tables` entries merge by privilege name and
+the highest depth wins, so an explicit entry only raises a preset depth. A
+table key that is not a modeled entity is blocked in the plan.
+
+Inspection reads the role by name in the root business unit (the business
+unit without a parent), the privileges the mapping names, and the depth of
+each of those the role holds. The plan creates an absent role in the solution
+(`create-security-role`) and lists, in one `add-role-privileges` operation per
+role, every privilege that is missing or held at a lower depth. A privilege
+held at an equal or higher depth is satisfied. Privileges are never removed
+and depths are never lowered; privileges the role holds beyond the mapping
+are neither changed nor reported. A table privilege of an entity the same plan
+creates cannot exist yet: it is listed with `"pending": true` and resolved
+when apply runs. Any other privilege name that does not exist in the
+environment is blocked. Apply creates the role with the solution header after
+the entities, keys and solution components, waits until the privileges of
+created tables are visible, and calls `AddPrivilegesRole` with the resolved
+privilege ids and depths. Assigning the role to users or teams, and effective
+access checks, are not part of this contract.
 
 ## 15. Transfer contract and PostgreSQL
 

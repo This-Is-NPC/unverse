@@ -3,6 +3,7 @@ import {
   canonical,
   type DataverseMapping,
   type Entity,
+  isSecurityRoleOperation,
   isSolutionComponentOperation,
   type Key,
   type ObservedColumn,
@@ -22,6 +23,10 @@ import {
 } from "@unverse/core";
 import { type DataverseClient, DataverseError } from "./client.js";
 import { endpoint, guid, identifier, literal, text } from "./odata.js";
+import {
+  inspectSecurityRoles,
+  provisionSecurityRoles,
+} from "./security-roles.js";
 import {
   createSolutionComponents,
   inspectSolutionComponents,
@@ -147,7 +152,9 @@ export async function inspectSchema(
         });
     }
   const solutionComponents = await inspectSolutionComponents(client, mapping);
+  const securityRoles = await inspectSecurityRoles(client, mapping, model);
   return {
+    ...(securityRoles === undefined ? {} : { securityRoles }),
     ...(solutionComponents === undefined ? {} : { solutionComponents }),
     entities: entities.sort((a, b) => a.name.localeCompare(b.name)),
     ...(model?.entities.some((entity) =>
@@ -229,7 +236,11 @@ export async function applySchema(
   const relationships: { entity: Entity; column: Column }[] = [];
   const keys: { entity: Entity; key: Key }[] = [];
   for (const operation of expected.operations) {
-    if (isSolutionComponentOperation(operation)) continue;
+    if (
+      isSolutionComponentOperation(operation) ||
+      isSecurityRoleOperation(operation)
+    )
+      continue;
     const entity = model.entities.find(
       (candidate) => candidate.name === operation.entity,
     );
@@ -372,6 +383,13 @@ export async function applySchema(
     mapping,
     expected.operations.filter(isSolutionComponentOperation),
     headers,
+  );
+  await provisionSecurityRoles(
+    client,
+    mapping,
+    expected.operations.filter(isSecurityRoleOperation),
+    headers,
+    (subject, probe) => awaitVisible(client, subject, probe),
   );
   return planSchema(
     model,

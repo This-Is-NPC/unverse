@@ -158,6 +158,66 @@ supported types and a 1:N relationship. See
    connector is blocked. Variable values and connections are never read or
    changed.
 
+7. Optionally declare security roles in the mapping document under
+   `securityRoles` (see [the design](design.md#14-schema-model-and-safety)).
+   `sr-Example-Users` is a placeholder role name and `parent` a modeled
+   entity:
+
+   ```json
+   {
+     "prefix": "uv",
+     "solution": "UnverseFixture",
+     "securityRoles": [
+       {
+         "name": "sr-Example-Users",
+         "preset": "code-app-base",
+         "privileges": { "prvReadAccount": "global" },
+         "tables": {
+           "parent": { "read": "global", "write": "global", "appendTo": "global" }
+         }
+       }
+     ]
+   }
+   ```
+
+   Against a synthetic environment (read through the built CLI with
+   `--mapping-file`) where neither the role nor the tables exist, planning
+   exited 0 and listed the role, then one privilege operation. Privileges of
+   tables the same plan creates are `pending`; the plan has no blocks, and
+   the privilege list is shortened here:
+
+   ```json
+   "operations": [
+     { "kind": "create-security-role", "role": "sr-Example-Users" },
+     {
+       "kind": "add-role-privileges",
+       "role": "sr-Example-Users",
+       "privileges": [
+         { "name": "prvActivateSynchronousWorkflow", "depth": "basic" },
+         { "name": "prvAppendTouv_parent", "depth": "global", "pending": true },
+         { "name": "prvReadAccount", "depth": "global" },
+         { "name": "prvReaduv_parent", "depth": "global", "pending": true },
+         { "name": "prvWriteuv_parent", "depth": "global", "pending": true }
+       ]
+     }
+   ]
+   ```
+
+   The role is looked up by name in the root business unit. A privilege the
+   role already holds at the same or a higher depth is left alone, one at a
+   lower depth is raised, and privileges the role holds beyond the mapping are
+   never changed or listed. A privilege name that does not exist is blocked,
+   for example:
+
+   ```json
+   {
+     "path": "securityRoles.sr-Example-Users.privileges.prvReadNothing",
+     "reason": "The privilege does not exist in this environment."
+   }
+   ```
+
+   Roles are not assigned to users or teams.
+
 ## What can go wrong
 
 Planning is informational: exit 0 does not mean every listed change can be

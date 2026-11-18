@@ -1,3 +1,4 @@
+import { parseSecurityRoles, type SecurityRoles } from "./security-roles.js";
 import {
   parseSolutionComponents,
   type SolutionComponents,
@@ -52,7 +53,7 @@ export interface SchemaModel {
   readonly entities: readonly Entity[];
 }
 
-export interface DataverseMapping extends SolutionComponents {
+export interface DataverseMapping extends SolutionComponents, SecurityRoles {
   readonly prefix: string;
   readonly solution: string;
 }
@@ -179,6 +180,7 @@ export function parseMapping(input: unknown): DataverseMapping {
     "solution",
     "environmentVariables",
     "connectionReferences",
+    "securityRoles",
   ]);
   if (
     typeof mapping.prefix !== "string" ||
@@ -196,6 +198,7 @@ export function parseMapping(input: unknown): DataverseMapping {
     prefix: mapping.prefix,
     solution: mapping.solution,
     ...parseSolutionComponents(mapping, mapping.prefix),
+    ...parseSecurityRoles(mapping),
   };
 }
 

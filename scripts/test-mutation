@@ -161,6 +161,14 @@ mutations.push(
   ["verify-write", "dataverse/plan.js", "? await verifySchemaPlan(client, input, environment)", "? (await applySchema(client, input, environment, true), await verifySchemaPlan(client, input, environment))", "cli", "verify reports an unsatisfied plan with exit 1 and a satisfied one with exit 0 without writing"],
 );
 
+mutations.push(
+  ["role-table-global", "core/security-roles.js", 'depthWord(depth) !== "global"', "false", "dataverse", "security role mappings validate names, depths, accesses and tables", "security-roles"],
+  ["role-lower", "core/security-roles.js", "depthRank(have.depth) >= depthRank(privilege.depth)", "depthRank(have.depth) === depthRank(privilege.depth)", "dataverse", "existing privileges at equal or higher depth are satisfied and lower ones are raised", "security-roles"],
+  ["role-pending", "core/security-roles.js", "createdEntities.has(privilege.table)", "false", "dataverse", "table privileges of an entity the same plan creates are pending and unknown privileges block", "security-roles"],
+  ["role-removal", "dataverse/security-roles.js", "Microsoft.Dynamics.CRM.AddPrivilegesRole", "Microsoft.Dynamics.CRM.ReplacePrivilegesRole", "dataverse", "role creation uses the solution header and AddPrivilegesRole removes nothing", "security-roles"],
+  ["role-root-unit", "dataverse/security-roles.js", " and _businessunitid_value eq ${root}", "", "dataverse", "roles are matched by name in the root business unit only", "security-roles"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

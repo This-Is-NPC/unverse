@@ -11,6 +11,11 @@ import {
   type SchemaModel,
 } from "./schema.js";
 import {
+  type ObservedSecurityRoles,
+  planSecurityRoles,
+  type SecurityRoleOperation,
+} from "./security-roles.js";
+import {
   type ObservedSolutionComponents,
   planSolutionComponents,
   type SolutionComponentOperation,
@@ -49,6 +54,7 @@ export interface ObservedEntity {
 
 export interface SchemaSnapshot {
   readonly solutionComponents?: ObservedSolutionComponents;
+  readonly securityRoles?: ObservedSecurityRoles;
   readonly entities: readonly ObservedEntity[];
   readonly externalTargets?: readonly {
     readonly table: string;
@@ -75,7 +81,8 @@ export type SchemaOperation =
       readonly entity: string;
       readonly key: string;
     }
-  | SolutionComponentOperation;
+  | SolutionComponentOperation
+  | SecurityRoleOperation;
 
 export interface BlockedChange {
   readonly path: string;
@@ -269,6 +276,18 @@ export async function planSchema(
   );
   operations.push(...components.operations);
   blocked.push(...components.blocked);
+  const roles = planSecurityRoles(
+    mapping,
+    model,
+    new Set(
+      operations.flatMap((operation) =>
+        operation.kind === "create-entity" ? [operation.entity] : [],
+      ),
+    ),
+    snapshot.securityRoles,
+  );
+  operations.push(...roles.operations);
+  blocked.push(...roles.blocked);
   return {
     planVersion: 1,
     kind: "schema",
