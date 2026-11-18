@@ -149,6 +149,12 @@ mutations.push(
   ["mapping-components", "cli/run.js", "JSON.parse(await runtime.readFile(flags.get(\"--mapping-file\") ?? \"\"))", "(({ prefix, solution }) => ({ prefix, solution }))(JSON.parse(await runtime.readFile(flags.get(\"--mapping-file\") ?? \"\")))", "cli", "CLI schema planning reads solution components from the mapping file"],
 );
 
+mutations.push(
+  ["artifact-invent-field", "dataverse/artifacts.js", "managed: row.managed,", "managed: row.managed ?? false,", "dataverse", "a field the source does not provide stays absent", "artifacts"],
+  ["artifact-type-validation", "cli/arguments.js", "positional.choices !== undefined && !positional.choices.includes(word)", "false", "cli", "an artifact type outside the catalog exits two before connecting"],
+  ["artifact-incomplete", "dataverse/artifacts.js", ": { items: items.slice(0, limit), complete: false }", ": { items: items.slice(0, limit), complete: true }", "cli", "a capped artifact list is inconclusive and exits seven"],
+);
+
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {
   const temporary = mkdtempSync("/tmp/opencode/unverse-mutation-");
   try {

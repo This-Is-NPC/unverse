@@ -13,6 +13,7 @@ import transferData from "../../core/test/fixtures/data.json" with {
 import transferModel from "../../core/test/fixtures/schema.json" with {
   type: "json",
 };
+import { artifactFixture } from "../../dataverse/test/fixtures/artifacts.mjs";
 import {
   dependencyEnvironment,
   dependencyFixture,
@@ -1138,4 +1139,87 @@ test("every command declares its effect in help, the reference, and the spec", a
     for (const group of command.groups)
       for (const name of group.flags) assert.ok(names.includes(name));
   }
+});
+
+test("artifact types lists the catalog offline without reading configuration", async () => {
+  const output = [];
+  let reads = 0;
+  const result = await runCli(
+    ["artifact", "types", "--format", "json"],
+    runtime(() => {
+      reads += 1;
+      return validConfig;
+    }, output),
+  );
+  assert.equal(result, 0);
+  assert.equal(reads, 0);
+  const types = JSON.parse(output[0]).data.types;
+  assert.ok(types.some((entry) => entry.type === "canvas-app"));
+  assert.ok(types.every((entry) => entry.platformName && entry.fields));
+});
+
+test("artifact list returns normalized items for a catalog type", async () => {
+  const output = [];
+  const result = await runCli(
+    ["artifact", "list", "canvas-app", "--env", "dev", "--format", "json"],
+    {
+      ...runtime(() => validConfig, output),
+      connect: () => artifactFixture().client,
+    },
+  );
+  assert.equal(result, 0);
+  const document = JSON.parse(output[0]);
+  assert.equal(document.coverage.complete, true);
+  assert.deepEqual(document.data.items.map((row) => row.kind).sort(), [
+    "classic",
+    "code-app",
+    "unknown",
+  ]);
+});
+
+test("an artifact type outside the catalog exits two before connecting", async () => {
+  const errors = [];
+  let connections = 0;
+  const result = await runCli(
+    ["artifact", "list", "nonsense", "--env", "dev"],
+    {
+      ...runtime(() => validConfig, [], errors),
+      connect: () => {
+        connections += 1;
+        return artifactFixture().client;
+      },
+    },
+  );
+  assert.equal(result, 2);
+  assert.equal(connections, 0);
+  assert.match(
+    errors[0],
+    /Unknown type nonsense; choose one of table, canvas-app/,
+  );
+});
+
+test("a capped artifact list is inconclusive and exits seven", async () => {
+  const output = [];
+  const result = await runCli(
+    [
+      "artifact",
+      "list",
+      "canvas-app",
+      "--env",
+      "dev",
+      "--limit",
+      "1",
+      "--format",
+      "json",
+    ],
+    {
+      ...runtime(() => validConfig, output),
+      connect: () => artifactFixture().client,
+    },
+  );
+  assert.equal(result, 7);
+  const document = JSON.parse(output[0]);
+  assert.equal(document.status, "inconclusive");
+  assert.equal(document.coverage.complete, false);
+  assert.equal(document.data.items.length, 1);
 });

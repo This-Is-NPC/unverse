@@ -1,4 +1,17 @@
 export {
+  type ArtifactAbsence,
+  type ArtifactField,
+  type ArtifactItem,
+  type ArtifactSource,
+  type ArtifactTypeName,
+  type ArtifactTypeSpec,
+  artifactCatalog,
+  artifactFields,
+  artifactSources,
+  artifactTypeNames,
+  findArtifactType,
+} from "./artifacts.js";
+export {
   ConfigValidationError,
   type EnvironmentProfile,
   type PostgresProfile,

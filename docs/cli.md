@@ -257,6 +257,43 @@ Find cloud flows without exporting definitions or connection secrets.
 - `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
 - `--search <text>`: Search names case-insensitively; table searches include labels and entity sets.
 
+## artifact types
+
+List the built-in artifact types with platform names, sources, and fields without contacting Dataverse.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse artifact types [--format <human|json|csv>]`
+
+### Flags
+
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+
+## artifact list
+
+List artifacts of one built-in type as normalized items with only the fields the source provides.
+
+- Effect: `read`
+- Output formats: `human` (default), `json`, `csv`
+
+`unverse artifact list <type> [--config <path>] --env <name> [--format <human|json|csv>] [--limit <items>]`
+
+### Arguments
+
+- `<type>`: Select a built-in artifact type. One of: table, canvas-app, model-driven-app, cloud-flow, security-role, connection-reference, environment-variable, solution, connector.
+
+### Flags
+
+- `--config <path>`: Read configuration instead of unverse.config.json.
+- `--env <name>` (required): Select a named environment profile.
+- `--format <human|json|csv>`: Select the output format (default human); human is indented JSON.
+- `--limit <items>`: Cap items and report incomplete coverage when more exist.
+
+### Exit codes
+
+- `7`: The item cap stopped the list before all items were returned.
+
 ## user list
 
 Find users to disambiguate role investigation selectors.

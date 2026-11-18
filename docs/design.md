@@ -120,6 +120,7 @@ Every command is `unverse <group> <command>` or the root command
 | `table`, `record` | `table list` finds table metadata; `record query <table>` runs a paginated OData read |
 | `schema` | `inspect`, `plan`, and `apply` for additive metadata |
 | `solution`, `app`, `flow`, `variable`, `connector`, `connref` | Read-only inventories; `solution show <solution-id>` and `connref show <reference-id>` inspect one item |
+| `artifact` | `types` prints the built-in artifact catalog offline; `list <type>` reads one type as normalized items (§19) |
 | `user`, `role` | `user list`, `user show` (direct and team roles), and `role check` |
 | `deps` | `list`, `graph`, and `impact` dependency evidence |
 | `seed`, `transfer` | `plan` and `apply` for fixture data and Dataverse-to-Dataverse transfer |
@@ -698,3 +699,57 @@ flag abbreviation. There is no `jsonl` format because nothing streams.
 **Growth.** A new feature adds a resource, a section in an existing document,
 or a pipeline. It does not add a verb or another flow beside observe, plan,
 and apply.
+
+## 19. Artifact catalog
+
+The artifact catalog is declared once in `@unverse/core`
+(`packages/core/src/artifacts.ts`). `unverse artifact types` prints it and
+`unverse artifact list <type>` reads one type from an environment. Readers
+live in `@unverse/dataverse` and reuse the existing discovery, connection,
+table, and role reads; the catalog adds no second query for a type that
+already had one.
+
+| Type | Platform name | Provided fields beyond `type`, `id`, `name`, `source` |
+| --- | --- | --- |
+| `table` | `EntityDefinitions` | `displayName` |
+| `canvas-app` | `canvasapps` | `displayName`, `owner`, `managed`, `kind` |
+| `model-driven-app` | `appmodules` | `displayName` |
+| `cloud-flow` | `workflows` (category 5) | `displayName`, `owner`, `managed` |
+| `security-role` | `roles` | `managed` |
+| `connection-reference` | `connectionreferences` | `displayName`, `managed` |
+| `environment-variable` | `environmentvariabledefinitions` | `displayName`, `managed` |
+| `solution` | `solutions` | `displayName`, `managed` |
+| `connector` | `connectors` | `displayName`, `managed` |
+
+Every type declares its sources (today only `dataverse`; a type can declare
+more than one later) and its id kind: a GUID, or the logical name for tables.
+
+**Normalization.** An item is `{ type, id, name, displayName?, solution?,
+publisher?, owner?, managed?, kind?, source }`. `name` is the stable
+internal name (unique name, schema name, or logical name) and `displayName`
+the label. `owner` is the owner GUID, which can be a user or a team. A field
+the source does not return for a row is absent from that row; it is never
+defaulted, so a missing `ismanaged` is not `managed: false`. Every optional
+field is either listed as provided or listed as absent with a reason in the
+catalog.
+
+**Canvas app kind.** `kind` is read from the `canvasapptype` column of
+`canvasapps`, documented by Microsoft Learn as 0 classic, 1 component
+library, 2 custom page, 3 unified, 4 code app, 5 mobile. The catalog names
+them `classic`, `component-library`, `custom-page`, `unified`, `code-app`, and
+`mobile`. A missing or unrecognized value is `unknown`. This mapping comes
+from the documentation; it was not observed against a live environment.
+
+**Not provided, and why.** `solution` and `publisher` are absent for every
+type: solution membership needs one `solutioncomponents` read per solution and
+the publisher a join through the solution, which the inventory does not make
+to avoid a request per item. `owner` and `managed` are absent where the
+reader does not select the column or the platform has no such notion (tables
+and solutions have no owner; roles belong to a business unit). The
+`publisher` column on `canvasapps` is free text, not a Dataverse publisher,
+and is not used.
+
+**Coverage.** `--limit` caps the returned items. When more exist the status
+is `inconclusive`, coverage is incomplete, and the exit is 7 (§8). An error on
+any page fails the command; it never yields a partial list marked complete.
+Environment variable values are never read.

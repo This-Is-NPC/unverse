@@ -1,3 +1,5 @@
+import { artifactTypeNames } from "@unverse/core";
+
 export type Effect = "read" | "write" | "destructive";
 export type Stage = "observe" | "plan" | "apply" | "other";
 export type Format = "human" | "json" | "csv" | "html" | "mermaid" | "svg";
@@ -24,6 +26,7 @@ export interface FlagsetSpec {
 export interface PositionalSpec {
   readonly name: string;
   readonly summary: string;
+  readonly choices?: readonly string[];
 }
 
 export interface CommandSpec {
@@ -518,6 +521,48 @@ export const resources: readonly ResourceSpec[] = [
           "Find cloud flows without exporting definitions or connection secrets.",
         flagsets: ["target", "output", "search"],
         outputs: tabular,
+      },
+    ],
+  },
+  {
+    name: "artifact",
+    summary: "Inventory the built-in artifact types.",
+    commands: [
+      {
+        name: "types",
+        stage: "other",
+        effect: "read",
+        summary:
+          "List the built-in artifact types with platform names, sources, and fields without contacting Dataverse.",
+        flagsets: ["output"],
+        outputs: tabular,
+      },
+      {
+        name: "list",
+        stage: "observe",
+        effect: "read",
+        summary:
+          "List artifacts of one built-in type as normalized items with only the fields the source provides.",
+        flagsets: ["target", "output"],
+        positionals: [
+          {
+            name: "type",
+            summary: "Select a built-in artifact type.",
+            choices: artifactTypeNames,
+          },
+        ],
+        flags: [
+          {
+            name: "--limit",
+            value: "items",
+            summary:
+              "Cap items and report incomplete coverage when more exist.",
+          },
+        ],
+        outputs: tabular,
+        exits: {
+          7: "The item cap stopped the list before all items were returned.",
+        },
       },
     ],
   },

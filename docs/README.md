@@ -40,6 +40,7 @@ tarballs; no npm publication is implied.
 | How do I import without overwriting existing tables? | [Import data](how-to-import-data.md) |
 | How do I check transfer equivalence? | [Verify transfer](how-to-verify-transfer.md) |
 | How do I find apps, flows, solutions, and users? | [Discover resources](how-to-discover-resources.md) |
+| How do I list every artifact of one type in a uniform shape? | [List artifacts](how-to-list-artifacts.md) |
 | Which environment settings differ? | [Compare environments](how-to-compare-environments.md) |
 | How do I export results for a spreadsheet? | [CSV output](how-to-export-csv.md) |
 | How do I seed reproducible development data? | [Seed data](how-to-seed-data.md) |

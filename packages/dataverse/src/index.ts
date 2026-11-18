@@ -1,3 +1,4 @@
+export { listArtifacts } from "./artifacts.js";
 export {
   type Credential,
   DataverseClient,

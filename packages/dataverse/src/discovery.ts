@@ -7,6 +7,9 @@ export interface Resource {
   readonly uniqueName: string | null;
   readonly kind: string;
   readonly state: number | null;
+  readonly managed?: boolean;
+  readonly ownerId?: string;
+  readonly appType?: number;
 }
 
 export function matches(
@@ -77,7 +80,7 @@ export async function apps(
     const response = await client.collect(
       endpoint(canvas ? "canvasapps" : "appmodules", {
         $select: canvas
-          ? "canvasappid,name,displayname"
+          ? "canvasappid,name,displayname,canvasapptype,ismanaged,_ownerid_value"
           : "appmoduleid,name,uniquename,statecode",
       }),
     );
@@ -91,6 +94,7 @@ export async function apps(
           uniqueName,
           kind: type,
           state: canvas ? null : number(row.statecode),
+          ...(canvas ? optionalColumns(row, "canvasapptype") : {}),
         });
     }
   }
@@ -105,7 +109,7 @@ export async function flows(
 ): Promise<readonly Resource[]> {
   const response = await client.collect(
     endpoint("workflows", {
-      $select: "workflowid,name,uniquename,statecode",
+      $select: "workflowid,name,uniquename,statecode,ismanaged,_ownerid_value",
       $filter: "category eq 5",
     }),
   );
@@ -116,6 +120,7 @@ export async function flows(
       uniqueName: nullableText(row, "uniquename"),
       kind: "cloud-flow",
       state: number(row.statecode),
+      ...optionalColumns(row),
     }))
     .filter((row) => matches(search, row.name, row.uniqueName))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -150,20 +155,31 @@ export interface Variable {
   readonly source: "override" | "default" | "unset" | "secret" | "ambiguous";
 }
 
+export async function variableDefinitions(client: DataverseClient) {
+  const response = await client.collect(
+    endpoint("environmentvariabledefinitions", {
+      $select:
+        "environmentvariabledefinitionid,schemaname,displayname,type,ismanaged",
+    }),
+  );
+  return response.rows.map((row) => ({
+    id: guid(text(row, "environmentvariabledefinitionid")),
+    schemaName: text(row, "schemaname"),
+    name: text(row, "displayname"),
+    type: number(row.type),
+    managed: nullableBoolean(row, "ismanaged"),
+  }));
+}
+
 async function readVariables(
   client: DataverseClient,
 ): Promise<readonly Variable[]> {
-  const response = await client.collect(
-    endpoint("environmentvariabledefinitions", {
-      $select: "environmentvariabledefinitionid,schemaname,displayname,type",
-    }),
-  );
   const result: Variable[] = [];
-  for (const row of response.rows) {
-    const type = number(row.type);
+  for (const definition of await variableDefinitions(client)) {
+    const { id, type } = definition;
     const base = {
-      schemaName: text(row, "schemaname"),
-      name: text(row, "displayname"),
+      schemaName: definition.schemaName,
+      name: definition.name,
       type,
     };
     if (type === 100000005) {
@@ -173,7 +189,7 @@ async function readVariables(
     const values = await client.collect(
       endpoint("environmentvariablevalues", {
         $select: "value",
-        $filter: `_environmentvariabledefinitionid_value eq ${guid(text(row, "environmentvariabledefinitionid"))} and statecode eq 0`,
+        $filter: `_environmentvariabledefinitionid_value eq ${id} and statecode eq 0`,
       }),
     );
     if (values.rows.length > 1) {
@@ -192,7 +208,7 @@ async function readVariables(
     const defaults = await client.collect(
       endpoint("environmentvariabledefinitions", {
         $select: "defaultvalue",
-        $filter: `environmentvariabledefinitionid eq ${guid(text(row, "environmentvariabledefinitionid"))}`,
+        $filter: `environmentvariabledefinitionid eq ${id}`,
       }),
     );
     if (defaults.rows.length !== 1)
@@ -380,6 +396,28 @@ function boolean(value: unknown): boolean {
       "Inventory boolean metadata is missing.",
     );
   return value;
+}
+
+function optionalColumns(
+  row: Record<string, unknown>,
+  typeColumn?: string,
+): Pick<Resource, "managed" | "ownerId" | "appType"> {
+  const managed = nullableBoolean(row, "ismanaged");
+  const ownerId = nullableText(row, "_ownerid_value");
+  const appType = typeColumn === undefined ? undefined : row[typeColumn];
+  return {
+    ...(managed === null ? {} : { managed }),
+    ...(ownerId === null ? {} : { ownerId }),
+    ...(typeof appType === "number" ? { appType } : {}),
+  };
+}
+
+export function nullableBoolean(
+  row: Record<string, unknown>,
+  key: string,
+): boolean | null {
+  const value = row[key];
+  return typeof value === "boolean" ? value : null;
 }
 
 function number(value: unknown): number {

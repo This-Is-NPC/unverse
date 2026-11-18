@@ -36,7 +36,8 @@ No package publication, npm scope ownership, or public download URL is implied.
 3. [Discover a table](docs/how-to-discover-tables.md), then
    [repeat a read](docs/how-to-query-records.md).
 4. [Find apps, flows, solutions, and users](docs/how-to-discover-resources.md)
-   or [compare configuration](docs/how-to-compare-environments.md).
+   [list artifacts of one type](docs/how-to-list-artifacts.md), or
+   [compare configuration](docs/how-to-compare-environments.md).
 5. [Seed synthetic development rows](docs/how-to-seed-data.md) after reviewing
    an explicitly owned model and schema.
 6. [Visualize dependencies](docs/how-to-explore-dependencies.md) or
@@ -99,6 +100,7 @@ can allowlist the `read` commands.
 | `pg verify` | Compare a committed target with its manifest |
 | `solution list` / `solution show <solution-id>` | Find solutions and inspect membership |
 | `app list` / `flow list` | Find visible apps and cloud flows |
+| `artifact types` / `artifact list <type>` | Show the built-in artifact catalog offline; list one type as normalized items |
 | `user list` | Find exact user identifiers for role investigation |
 | `variable list` | Inspect masked settings |
 | `seed plan` / `seed apply` | Create deterministic, reviewed development fixtures |

@@ -1,5 +1,6 @@
 import {
   analyzeDependencies,
+  artifactCatalog,
   type DependencyGraph,
   dependencyHtml,
   dependencyMermaid,
@@ -8,6 +9,7 @@ import {
   type EnvironmentProfile,
   type ErrorCode,
   exitCodeFor,
+  findArtifactType,
   outputVersion,
   type PostgresProfile,
   parseConfig,
@@ -35,6 +37,7 @@ import {
   exportTransfer,
   flows,
   inspectSchema,
+  listArtifacts,
   OrganizationMismatchError,
   planDataverseTransfer,
   planSeed,
@@ -100,6 +103,25 @@ export async function runCli(
       );
       return 0;
     }
+    if (command === "artifact types")
+      return emit(
+        {
+          outputVersion,
+          command,
+          timestamp: runtime.now(),
+          status: "ok",
+          data: { types: artifactCatalog },
+          evidence: [
+            "The built-in artifact catalog was read from this program.",
+          ],
+          coverage: {
+            complete: true,
+            limitations: ["No environment was contacted."],
+          },
+        },
+        format,
+        runtime,
+      );
     const config = parseConfig(
       JSON.parse(
         await runtime.readFile(flags.get("--config") ?? "unverse.config.json"),
@@ -324,6 +346,41 @@ export async function runCli(
             complete: true,
             limitations: [
               "Only visible solution-aware metadata is listed. Connections, credentials, health, permissions, DLP, and observed consumers are not tested by this inventory.",
+            ],
+          },
+        },
+        format,
+        runtime,
+      );
+    }
+    if (command === "artifact list") {
+      const spec = findArtifactType(positionals.get("type") ?? "");
+      if (spec === undefined)
+        throw new InputError("The artifact type is not in the catalog.");
+      const limit = flags.get("--limit");
+      const { items, complete } = await listArtifacts(
+        client,
+        spec,
+        limit === undefined ? undefined : Number(limit),
+      );
+      return emit(
+        {
+          ...base,
+          caller: { id: identity.applicationUserId, kind: "application-user" },
+          status: complete ? "ok" : "inconclusive",
+          data: { type: spec.type, items },
+          evidence: [
+            "Selected environment identity and paginated inventory reads completed.",
+          ],
+          coverage: {
+            complete,
+            limitations: [
+              "Only items visible to this caller are listed, and only the fields the catalog declares for the type.",
+              ...(complete
+                ? []
+                : [
+                    "The item cap stopped the list before all items were returned.",
+                  ]),
             ],
           },
         },

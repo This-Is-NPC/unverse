@@ -1,4 +1,5 @@
 import { type DataverseClient, DataverseError } from "./client.js";
+import { nullableBoolean } from "./discovery.js";
 import { endpoint, guid, literal, nullableText, text } from "./odata.js";
 
 export interface UserSelector {
@@ -134,4 +135,17 @@ function addRole(
     businessUnitId: nullableText(row, "_businessunitid_value"),
     sources,
   });
+}
+
+export async function securityRoles(client: DataverseClient) {
+  const roles = await client.collect(
+    endpoint("roles", { $select: "roleid,name,ismanaged" }),
+  );
+  return roles.rows
+    .map((row) => ({
+      id: guid(text(row, "roleid")),
+      name: text(row, "name"),
+      managed: nullableBoolean(row, "ismanaged"),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }

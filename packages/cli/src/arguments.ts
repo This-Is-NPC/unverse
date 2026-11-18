@@ -128,6 +128,13 @@ function parseCommand(route: Route, tokens: readonly string[]): Invocation {
     throw new InputError(`<${missing.name}> is required.`);
   if (words.length > declared.length)
     throw new InputError(`Unexpected argument ${words[declared.length]}.`);
+  for (const [index, positional] of declared.entries()) {
+    const word = words[index] ?? "";
+    if (positional.choices !== undefined && !positional.choices.includes(word))
+      throw new InputError(
+        `Unknown ${positional.name} ${word}; choose one of ${positional.choices.join(", ")}.`,
+      );
+  }
   for (const flag of flags) {
     if (flag.required === true && !values.has(flag.name))
       throw new InputError(`${flag.name} is required.`);

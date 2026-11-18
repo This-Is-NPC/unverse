@@ -264,3 +264,18 @@ A group such as `unverse table --help` lists its commands. A bare group prints
 that list to standard error and exits 2.
 
 ![Command help](img/30-command-help.png)
+
+## 34. Artifact types
+
+`unverse artifact types` prints the built-in artifact catalog: each type's
+platform name, sources, provided fields, and the fields it cannot provide with
+a reason. It does not contact Dataverse.
+
+![Artifact types](img/31-artifact-types.png)
+
+## 35. Artifact list
+
+`unverse artifact list <type> --env <name>` prints normalized items. The
+fixture app is a code app; a field the source does not return is absent.
+
+![Artifact list](img/32-artifact-list.png)

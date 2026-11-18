@@ -5,6 +5,7 @@ import {
   type FlagSpec,
   globalExits,
   type OneOfGroup,
+  type PositionalSpec,
   type ResourceSpec,
   type Route,
   resources,
@@ -25,6 +26,12 @@ function groupText(group: OneOfGroup, flags: readonly FlagSpec[]): string {
       flagText(flags.find((flag) => flag.name === name) as FlagSpec),
     )
     .join(" | ")})`;
+}
+
+function positionalSummary(positional: PositionalSpec): string {
+  return positional.choices === undefined
+    ? positional.summary
+    : `${positional.summary} One of: ${positional.choices.join(", ")}.`;
 }
 
 export function usage(route: Route): string {
@@ -130,7 +137,7 @@ export function renderCommandHelp(route: Route): string {
           ...columns(
             (route.command.positionals ?? []).map((positional) => [
               `  <${positional.name}>`,
-              positional.summary,
+              positionalSummary(positional),
             ]),
           ),
         ]),
@@ -182,7 +189,7 @@ function renderCommandReference(route: Route): string {
           ...bullets(
             (command.positionals ?? []).map(
               (positional) =>
-                `- \`<${positional.name}>\`: ${positional.summary}`,
+                `- \`<${positional.name}>\`: ${positionalSummary(positional)}`,
             ),
           ),
         ]),
