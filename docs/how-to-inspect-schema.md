@@ -27,6 +27,15 @@ to reuse in an existing environment. Metadata read permissions are required.
    remain `definition: null`, not an assumed supported type. Logical and
    computed companion attributes are excluded from the managed structure.
 
+   Each entity also lists its alternate keys: `name` is the Dataverse schema
+   name, `columns` the sorted key attributes, and `indexStatus` the index state
+   (`Pending`, `InProgress`, `Active`, or `Failed`). Against the synthetic
+   fixture:
+
+   ```json
+   "keys": [{ "name": "uv_by_code", "columns": ["uv_code"], "indexStatus": "Active" }]
+   ```
+
 ## What can go wrong
 
 A prefix covers all matching custom entities, not merely one solution's

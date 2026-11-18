@@ -114,6 +114,15 @@ mutations.push(
 mutations.push(
   ["schema-visibility-wait", "dataverse/schema.js", "async function visible(client, entity, attributes) {", "async function visible(client, entity, attributes) {\nreturn;", "dataverse", "apply waits for created metadata to be visible before dependent writes", "schema"],
   ["schema-visibility-deadline", "dataverse/schema.js", "if (shown === undefined)", "if (false)", "dataverse", "apply reports created metadata that never becomes visible", "schema"],
+  ["key-column-required", "core/schema.js", "if (column.nullable)\n", "if (false)\n", "core", "alternate key declarations reject unsupported, optional, missing, and duplicate columns", "keys"],
+  ["key-column-type", "core/schema.js", "if (!keyTypes.includes(column.type) &&", "if (false &&", "core", "alternate key declarations reject unsupported, optional, missing, and duplicate columns", "keys"],
+  ["key-duplicate-tuple", "core/values.js", "if (tuples.size !== normalized[entity.name]?.length)", "if (false)", "core", "seed, export, and transfer reject duplicate alternate key tuples", "keys"],
+  ["key-change", "core/plan.js", "else if (!sameColumns(observed.columns, columns))", "else if (false)", "dataverse", "existing keys are never changed or removed", "schema"],
+  ["key-removal", "core/plan.js", "if (observed.name.startsWith(`${mapping.prefix}_`) &&", "if (false &&", "dataverse", "existing keys are never changed or removed", "schema"],
+  ["key-index-status", "core/plan.js", 'else if (observed.indexStatus !== "Active")', "else if (false)", "dataverse", "a key whose index is not active by the deadline is reported unverified", "schema"],
+  ["key-visibility", "dataverse/schema.js", "await awaitVisible(client, schemaName, listing);", "", "dataverse", "apply reports a created key that never becomes visible", "schema"],
+  ["key-index-wait", "dataverse/schema.js", 'status === "Active" || status === "Failed"', "true", "dataverse", "alternate keys are created after their columns and wait for an active index", "schema"],
+  ["postgres-key-verify", "postgres/index.js", "if (!uniques.rows.some(", "if (false && !uniques.rows.some(", "postgres", "PostgreSQL enforces alternate keys and verification detects a removed key", "postgres"],
 );
 
 for (const [name, file, before, after, workspace, testName, namedFile] of mutations) {

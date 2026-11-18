@@ -3,11 +3,14 @@ import {
   canonical,
   type DataverseMapping,
   type Entity,
+  type Key,
   type ObservedColumn,
+  type ObservedKey,
   parseMapping,
   parseModel,
   physicalColumn,
   physicalEntity,
+  physicalKey,
   planSchema,
   record,
   type SchemaEnvironment,
@@ -64,6 +67,9 @@ export async function inspectSchema(
           text(target.rows[0] ?? {}, "PrimaryIdAttribute"),
         );
     }
+    const keys = await client.collect(
+      `EntityDefinitions(LogicalName='${safeName(name)}')/Keys`,
+    );
     entities.push({
       name,
       metadataId: text(entity, "MetadataId"),
@@ -87,6 +93,9 @@ export async function inspectSchema(
             externalKeys,
           ),
         )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      keys: keys.rows
+        .map(normalizeKey)
         .sort((a, b) => a.name.localeCompare(b.name)),
     });
   }
@@ -190,6 +199,7 @@ export async function applySchema(
     );
   const headers = { "MSCRM.SolutionUniqueName": mapping.solution };
   const relationships: { entity: Entity; column: Column }[] = [];
+  const keys: { entity: Entity; key: Key }[] = [];
   for (const operation of expected.operations) {
     const entity = model.entities.find(
       (candidate) => candidate.name === operation.entity,
@@ -235,6 +245,13 @@ export async function applySchema(
           column.externalReference !== undefined
         )
           relationships.push({ entity, column });
+    } else if (operation.kind === "create-key") {
+      const key = entity.keys?.find(
+        (candidate) => candidate.name === operation.key,
+      );
+      if (key === undefined)
+        throw new DataverseError("invalid-input", "Plan key is missing.");
+      keys.push({ entity, key });
     } else {
       const column = entity.columns.find(
         (candidate) => candidate.name === operation.column,
@@ -301,6 +318,8 @@ export async function applySchema(
       physicalColumn(mapping, entity, column),
     ]);
   }
+  for (const { entity, key } of keys)
+    await createKey(client, mapping, entity, key, headers);
   return planSchema(
     model,
     mapping,
@@ -309,7 +328,49 @@ export async function applySchema(
   );
 }
 
+async function createKey(
+  client: DataverseClient,
+  mapping: DataverseMapping,
+  entity: Entity,
+  key: Key,
+  headers: Readonly<Record<string, string>>,
+): Promise<void> {
+  const keys = `EntityDefinitions(LogicalName='${physicalEntity(mapping, entity)}')/Keys`;
+  const schemaName = physicalKey(mapping, key);
+  await client.write(
+    "POST",
+    keys,
+    {
+      "@odata.type": "Microsoft.Dynamics.CRM.EntityKeyMetadata",
+      SchemaName: schemaName,
+      DisplayName: label(key.name),
+      KeyAttributes: key.columns.map((name) =>
+        physicalColumn(
+          mapping,
+          entity,
+          entity.columns.find((column) => column.name === name) as Column,
+        ),
+      ),
+    },
+    headers,
+  );
+  const listing = async () =>
+    (await client.collect(keys)).rows.find(
+      (row) => row.SchemaName === schemaName,
+    );
+  await awaitVisible(client, schemaName, listing);
+  await client.until(
+    async () => {
+      const status = (await listing())?.EntityKeyIndexStatus;
+      return status === "Active" || status === "Failed" ? status : undefined;
+    },
+    indexDeadline,
+    visibilityInterval,
+  );
+}
+
 const visibilityDeadline = 120_000;
+const indexDeadline = 300_000;
 const visibilityInterval = 2_000;
 
 async function visible(
@@ -317,35 +378,41 @@ async function visible(
   entity: string,
   attributes: readonly string[],
 ): Promise<void> {
+  await awaitVisible(client, entity, async () => {
+    try {
+      const present = await client.collect(
+        endpoint(
+          `EntityDefinitions(LogicalName='${safeName(entity)}')/Attributes`,
+          { $select: "LogicalName" },
+        ),
+      );
+      return attributes.every((name) =>
+        present.rows.some((row) => row.LogicalName === name),
+      )
+        ? true
+        : undefined;
+    } catch (error) {
+      if (error instanceof DataverseError && error.httpStatus === 404)
+        return undefined;
+      throw error;
+    }
+  });
+}
+
+async function awaitVisible(
+  client: DataverseClient,
+  subject: string,
+  probe: () => Promise<unknown>,
+): Promise<void> {
   const shown = await client.until(
-    async () => {
-      try {
-        const present = await client.collect(
-          endpoint(
-            `EntityDefinitions(LogicalName='${safeName(entity)}')/Attributes`,
-            {
-              $select: "LogicalName",
-            },
-          ),
-        );
-        return attributes.every((name) =>
-          present.rows.some((row) => row.LogicalName === name),
-        )
-          ? true
-          : undefined;
-      } catch (error) {
-        if (error instanceof DataverseError && error.httpStatus === 404)
-          return undefined;
-        throw error;
-      }
-    },
+    probe,
     visibilityDeadline,
     visibilityInterval,
   );
   if (shown === undefined)
     throw new DataverseError(
       "service",
-      `Created metadata for ${entity} is not visible after ${visibilityDeadline / 1000} seconds; inspect and create a fresh plan before retrying.`,
+      `Created metadata for ${subject} is not visible after ${visibilityDeadline / 1000} seconds; inspect and create a fresh plan before retrying.`,
     );
 }
 
@@ -362,6 +429,23 @@ export async function assertEnvironment(
       "invalid-input",
       "The supplied environment does not match the authenticated client.",
     );
+}
+
+function normalizeKey(row: Record<string, unknown>): ObservedKey {
+  const columns = row.KeyAttributes;
+  if (
+    !Array.isArray(columns) ||
+    columns.some((column) => typeof column !== "string")
+  )
+    throw new DataverseError(
+      "service",
+      "Dataverse key metadata is missing KeyAttributes.",
+    );
+  return {
+    name: text(row, "SchemaName"),
+    columns: [...columns].sort(),
+    indexStatus: text(row, "EntityKeyIndexStatus"),
+  };
 }
 
 function normalizeColumn(

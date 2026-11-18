@@ -29,6 +29,32 @@ supported types and a 1:N relationship. See
    constraints, removed fields, removed tables, and unknown definitions cannot
    reach the write transport.
 
+3. To require uniqueness, declare alternate keys on an entity. `code` and
+   `by_code` are placeholders:
+
+   ```json
+   "columns": [
+     { "name": "code", "type": "text", "nullable": false, "maxLength": 20 }
+   ],
+   "keys": [{ "name": "by_code", "columns": ["code"] }]
+   ```
+
+   Key columns must be required and of a type Dataverse can key (text,
+   integer, decimal, date, instant, choice, or a lookup). Against the
+   synthetic fixture that already had the entity without `code`, the plan
+   listed the column first and the key after it:
+
+   ```json
+   "operations": [
+     { "kind": "add-column", "entity": "parent", "column": "code" },
+     { "kind": "create-key", "entity": "parent", "key": "by_code" }
+   ]
+   ```
+
+   A key that exists with other columns, or that the model no longer lists, is
+   in `blocked`. Keys are never changed or deleted. A key that exists but whose
+   index is not yet `Active` is in `unverified`.
+
 ## What can go wrong
 
 Planning is informational: exit 0 does not mean every listed change can be

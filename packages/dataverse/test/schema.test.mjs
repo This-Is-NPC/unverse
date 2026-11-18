@@ -260,3 +260,124 @@ test("apply reports created metadata that never becomes visible", async () => {
   );
   assert.equal(fixture.writes.length, 1);
 });
+
+const keyedModel = parseModel({
+  ...model,
+  entities: model.entities.map((entity) => ({
+    ...entity,
+    columns: [
+      ...entity.columns,
+      { name: "code", type: "text", nullable: false, maxLength: 20 },
+    ],
+    keys: [{ name: "by_code", columns: ["code"] }],
+  })),
+});
+
+test("alternate keys are created after their columns and wait for an active index", async () => {
+  const fixture = schemaFixture({ lag: 2, indexLag: 5 });
+  const result = await applySchema(
+    fixture.client,
+    await plan(fixture, keyedModel),
+    environment,
+    true,
+  );
+  assert.deepEqual(fixture.early, []);
+  assert.deepEqual(result.operations, []);
+  assert.deepEqual(result.blocked, []);
+  assert.deepEqual(result.unverified, []);
+  const write = fixture.writes.at(-1);
+  assert.equal(write.path, "EntityDefinitions(LogicalName='uv_parent')/Keys");
+  assert.equal(write.body.SchemaName, "uv_by_code");
+  assert.deepEqual(write.body.KeyAttributes, ["uv_code"]);
+  assert.equal(write.headers["MSCRM.SolutionUniqueName"], "UnverseFixture");
+  assert.equal(
+    fixture.writes.filter((entry) => entry.path.endsWith("/Keys")).length,
+    1,
+  );
+  assert.deepEqual(
+    (await inspectSchema(fixture.client, mapping)).entities[0].keys,
+    [{ name: "uv_by_code", columns: ["uv_code"], indexStatus: "Active" }],
+  );
+});
+
+test("a key whose index is not active by the deadline is reported unverified", async () => {
+  const fixture = schemaFixture({ indexLag: Number.POSITIVE_INFINITY });
+  const result = await applySchema(
+    fixture.client,
+    await plan(fixture, keyedModel),
+    environment,
+    true,
+  );
+  assert.deepEqual(result.operations, []);
+  assert.deepEqual(result.blocked, []);
+  assert.deepEqual(result.unverified, [
+    {
+      path: "parent.keys.by_code",
+      reason: "The key index status is Pending, not Active.",
+    },
+  ]);
+});
+
+test("existing keys are never changed or removed", async () => {
+  const fixture = schemaFixture();
+  await applySchema(
+    fixture.client,
+    await plan(fixture, keyedModel),
+    environment,
+    true,
+  );
+  const keys = fixture.entities.get("uv_parent").keys;
+  const other = { SchemaName: "other_key", KeyAttributes: ["name"] };
+  keys.push(other);
+  assert.deepEqual((await plan(fixture, keyedModel)).blocked, []);
+  keys.pop();
+  const wider = parseModel({
+    ...keyedModel,
+    entities: keyedModel.entities.map((entity) => ({
+      ...entity,
+      keys: [{ name: "by_code", columns: ["code", "name"] }],
+    })),
+  });
+  const renamed = parseModel({
+    ...keyedModel,
+    entities: keyedModel.entities.map((entity) => ({
+      ...entity,
+      keys: [{ name: "by_other", columns: ["code"] }],
+    })),
+  });
+  const reduced = parseModel({
+    ...keyedModel,
+    entities: keyedModel.entities.map(({ keys: _keys, ...entity }) => entity),
+  });
+  for (const [selected, reason] of [
+    [wider, "changing a key is blocked"],
+    [renamed, "renaming a key is blocked"],
+    [reduced, "Removing an existing custom key"],
+  ]) {
+    const blocked = await plan(fixture, selected);
+    assert.ok(
+      blocked.blocked.some((entry) => entry.reason.includes(reason)),
+      reason,
+    );
+    assert.ok(!blocked.operations.some((entry) => entry.kind === "create-key"));
+    fixture.writes.length = 0;
+    await assert.rejects(
+      applySchema(fixture.client, blocked, environment, true),
+      /blocked/,
+    );
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("apply reports a created key that never becomes visible", async () => {
+  const fixture = schemaFixture({ keyLag: Number.POSITIVE_INFINITY });
+  await assert.rejects(
+    applySchema(
+      fixture.client,
+      await plan(fixture, keyedModel),
+      environment,
+      true,
+    ),
+    /not visible/,
+  );
+});

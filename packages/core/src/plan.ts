@@ -6,6 +6,7 @@ import {
   fingerprint,
   physicalColumn,
   physicalEntity,
+  physicalKey,
   type SchemaModel,
 } from "./schema.js";
 
@@ -21,12 +22,19 @@ export interface ObservedColumn {
   readonly providerType: string;
 }
 
+export interface ObservedKey {
+  readonly name: string;
+  readonly columns: readonly string[];
+  readonly indexStatus: string;
+}
+
 export interface ObservedEntity {
   readonly name: string;
   readonly metadataId: string;
   readonly primaryKey: string;
   readonly primaryName: string;
   readonly columns: readonly ObservedColumn[];
+  readonly keys: readonly ObservedKey[];
 }
 
 export interface SchemaSnapshot {
@@ -43,6 +51,11 @@ export type SchemaOperation =
       readonly kind: "add-column";
       readonly entity: string;
       readonly column: string;
+    }
+  | {
+      readonly kind: "create-key";
+      readonly entity: string;
+      readonly key: string;
     };
 
 export interface SchemaPlan {
@@ -57,6 +70,10 @@ export interface SchemaPlan {
     readonly path: string;
     readonly reason: string;
   }[];
+  readonly unverified: readonly {
+    readonly path: string;
+    readonly reason: string;
+  }[];
   readonly limitations: readonly string[];
 }
 
@@ -68,6 +85,8 @@ export async function planSchema(
 ): Promise<SchemaPlan> {
   const operations: SchemaOperation[] = [];
   const blocked: { path: string; reason: string }[] = [];
+  const keyOperations: SchemaOperation[] = [];
+  const unverified: { path: string; reason: string }[] = [];
   for (const entity of model.entities) {
     const existing = snapshot.entities.find(
       (observed) => observed.name === physicalEntity(mapping, entity),
@@ -147,6 +166,53 @@ export async function planSchema(
           reason: "Removing an existing custom column is blocked.",
         });
     }
+    for (const key of entity.keys ?? []) {
+      const path = `${entity.name}.keys.${key.name}`;
+      const schemaName = physicalKey(mapping, key);
+      const columns = key.columns.map((name) =>
+        physicalColumn(
+          mapping,
+          entity,
+          entity.columns.find((column) => column.name === name) as Column,
+        ),
+      );
+      const observed = existing?.keys.find(
+        (value) => value.name === schemaName,
+      );
+      const twin = existing?.keys.find(
+        (value) => sameColumns(value.columns, columns) && value !== observed,
+      );
+      if (twin !== undefined)
+        blocked.push({
+          path,
+          reason: `Another key (${twin.name}) already uses these columns; renaming a key is blocked.`,
+        });
+      else if (observed === undefined)
+        keyOperations.push({
+          kind: "create-key",
+          entity: entity.name,
+          key: key.name,
+        });
+      else if (!sameColumns(observed.columns, columns))
+        blocked.push({
+          path,
+          reason: "Existing key columns differ; changing a key is blocked.",
+        });
+      else if (observed.indexStatus !== "Active")
+        unverified.push({
+          path,
+          reason: `The key index status is ${observed.indexStatus}, not Active.`,
+        });
+    }
+    for (const observed of existing?.keys ?? [])
+      if (
+        observed.name.startsWith(`${mapping.prefix}_`) &&
+        !entity.keys?.some((key) => physicalKey(mapping, key) === observed.name)
+      )
+        blocked.push({
+          path: `${entity.name}.keys.${observed.name}`,
+          reason: "Removing an existing custom key is blocked.",
+        });
   }
   for (const existing of snapshot.entities) {
     if (
@@ -166,8 +232,9 @@ export async function planSchema(
     mapping,
     model,
     observedFingerprint: await fingerprint(snapshot),
-    operations,
+    operations: [...operations, ...keyOperations],
     blocked,
+    unverified,
     limitations: [
       "RequiredLevel is application-level in Dataverse, not a server-side NOT NULL guarantee.",
       "Only additive metadata changes are supported; unknown or destructive changes are blocked.",
@@ -193,4 +260,8 @@ function columnCapability(entity: Entity, column: Column): string | null {
   if (column.name === entity.primaryName && (column.maxLength ?? 0) > 850)
     return "Dataverse primary-name text is limited to 850 characters.";
   return null;
+}
+
+function sameColumns(a: readonly string[], b: readonly string[]): boolean {
+  return canonical([...a].sort()) === canonical([...b].sort());
 }

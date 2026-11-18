@@ -39,7 +39,7 @@ export const model = parseModel({
   ],
 });
 
-export function schemaFixture({ lag = 0 } = {}) {
+export function schemaFixture({ lag = 0, keyLag = lag, indexLag = 0 } = {}) {
   const entities = new Map();
   const writes = [];
   const early = [];
@@ -52,6 +52,7 @@ export function schemaFixture({ lag = 0 } = {}) {
     },
   };
   const hide = (object) => hidden.set(object, lag);
+  const indexing = new Map();
   const listed = (object) => (hidden.get(object) ?? 0) === 0;
   const age = (object) => {
     const remaining = hidden.get(object) ?? 0;
@@ -108,6 +109,21 @@ export function schemaFixture({ lag = 0 } = {}) {
           ),
         });
       }
+      if (path.endsWith("/Keys")) {
+        const name = /LogicalName='([^']+)'/.exec(path)?.[1];
+        const entity = entities.get(name);
+        const keys = (entity?.keys ?? []).filter(listed);
+        const rows = keys.map((key) => ({
+          ...key,
+          EntityKeyIndexStatus:
+            (indexing.get(key) ?? 0) > 0 ? "Pending" : "Active",
+        }));
+        for (const key of entity?.keys ?? []) {
+          age(key);
+          if (listed(key)) indexing.set(key, (indexing.get(key) ?? 0) - 1);
+        }
+        return response({ value: rows });
+      }
       if (path === "solutions")
         return response({
           value: [
@@ -118,13 +134,13 @@ export function schemaFixture({ lag = 0 } = {}) {
         return response({ value: [{ customizationprefix: mapping.prefix }] });
       throw new Error(`Unknown schema fixture read: ${path}`);
     },
-    request: async (method, input, _headers, json) => {
+    request: async (method, input, headers, json) => {
       const path = decodeURIComponent(new URL(input).pathname).replace(
         "/api/data/v9.2/",
         "",
       );
       const body = JSON.parse(json ?? "{}");
-      writes.push({ method, path, body });
+      writes.push({ method, path, body, headers });
       const target =
         path === "RelationshipDefinitions"
           ? [body.ReferencedEntity, body.ReferencingEntity]
@@ -155,10 +171,19 @@ export function schemaFixture({ lag = 0 } = {}) {
             },
             ...body.Attributes.map(attribute),
           ],
+          keys: [],
         };
         entities.set(body.SchemaName, entity);
         hide(entity);
         for (const column of entity.columns) hide(column);
+      } else if (path.endsWith("/Keys")) {
+        const key = {
+          SchemaName: body.SchemaName,
+          KeyAttributes: body.KeyAttributes,
+        };
+        entities.get(/LogicalName='([^']+)'/.exec(path)?.[1]).keys.push(key);
+        hidden.set(key, keyLag);
+        indexing.set(key, indexLag);
       } else if (path === "RelationshipDefinitions") {
         const column = {
           LogicalName: body.Lookup.SchemaName,

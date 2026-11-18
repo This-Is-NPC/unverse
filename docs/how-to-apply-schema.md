@@ -32,6 +32,21 @@ implicitly; only the explicit opt-in test harness creates disposable fixtures.
    lists after inspection. Reapplying the satisfied plan created no duplicate
    structure. Unknown post-apply state reports incomplete coverage, not success.
 
+3. After an alternate key is created Dataverse builds its index in the
+   background. Apply waits up to 300 seconds. If the index is still not
+   `Active`, the command exits 7 with status `inconclusive`, and `unverified`
+   in the returned plan names the key:
+
+   ```json
+   "unverified": [
+     { "path": "parent.keys.by_code", "reason": "The key index status is Pending, not Active." }
+   ]
+   ```
+
+   The key exists. Run `schema plan` again later: the key is satisfied once its
+   index is `Active`. A `Failed` index also stays in `unverified`; fix the
+   data that violates uniqueness in Dataverse, then reactivate the key there.
+
 ## What can go wrong
 
 After each creation, apply waits up to 120 seconds for the created metadata

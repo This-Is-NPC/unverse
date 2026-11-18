@@ -196,6 +196,7 @@ for (const entity of model.entities) {
         : { AttributeType: "Lookup", Targets: [`tx_${column.references}`] }),
     })),
   };
+  routes[`EntityDefinitions(LogicalName='${physical}')/Keys`] = { value: [] };
   routes[`${physical}s`] = {
     value: data[entity.name].map((row) =>
       Object.fromEntries(

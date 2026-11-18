@@ -309,11 +309,28 @@ lookups, not standalone custom Dataverse UUID fields. Date maps to DateOnly;
 instant requires explicit `utc` semantics and `resolution: "second"`, and maps
 to UserLocal stored UTC. Fractional-second values are outside the verified
 portable subset and fail validation rather than being rounded.
-Money, files, polymorphic lookups, alternate keys, and unknown model
-properties are rejected rather than silently converted or discarded.
+Money, files, polymorphic lookups, and unknown model properties are rejected
+rather than silently converted or discarded.
+
+An entity may declare `keys: [{name, columns}]`, Dataverse alternate keys.
+Validation requires one to ten keys, unique key names per entity, one to
+sixteen distinct columns per key that exist on the entity, no two keys with the
+same column set, and only required columns of type text, integer, decimal,
+date, instant, choice, or a UUID that references an entity. Multiline text,
+boolean, and plain UUID columns are rejected because Dataverse cannot key
+them. Columns are stored sorted: a key is a set. The mapping names a key
+`<prefix>_<key>`. The 900-byte index size limit is enforced by Dataverse when
+the key is created, not by the model. Inspection reads
+`EntityDefinitions(LogicalName='…')/Keys` and keeps each key's schema name,
+attribute set, and `EntityKeyIndexStatus`.
 
 Normalized metadata preserves unknown provider types as unknown. Plans report
-blocked removals and changed constraints. Dataverse RequiredLevel is an
+blocked removals and changed constraints. A missing key is a `create-key`
+operation, listed after every column and relationship operation. An existing
+key with the same columns is satisfied. A key with other columns, a key on the
+same columns under another name, and a prefix-owned key absent from the model
+are blocked; keys are never changed or deleted. A satisfied key whose index
+status is not `Active` is listed under `unverified`, not as done. Dataverse RequiredLevel is an
 application-level rule, not an SQL NOT NULL guarantee. That limitation appears
 in plan and apply results. SQL schema inference is not used.
 
@@ -321,17 +338,24 @@ Apply requires explicit confirmation and an independently resolved current
 environment. It re-inspects metadata, deterministically rebuilds the plan,
 compares the whole reviewed document, checks the solution's publisher, and
 rejects stale, foreign, modified, or blocked plans before writes. It creates
-entities, adds supported columns, and creates 1:N relationships only. It does
-not remove structures or retry writes. Requests are not an atomic transaction.
+entities, adds supported columns, creates 1:N relationships, and then creates
+alternate keys only. It does not remove structures or retry writes. Requests are not an atomic transaction.
 
 Dataverse metadata becomes readable some time after a write. After creating an
-entity, column, or relationship, apply polls the entity's attribute list every
-two seconds until every created attribute is listed, and only then runs a step
-that depends on it. A relationship is confirmed by its lookup attribute. A
+entity, column, relationship, or key, apply polls every two seconds until
+metadata lists it, and only then runs a step that depends on it: the entity's
+attribute list for entities and columns, the lookup attribute for a
+relationship, and the entity's key list for a key. A
 missing entity (HTTP 404) counts as not yet visible. The deadline is 120
 seconds; when it expires apply stops with a `service` error and issues no
 further writes. The poll uses the client's injected clock, so offline tests
 advance a fake clock instead of sleeping.
+
+Dataverse builds a key's index in the background (`Pending`, `InProgress`,
+`Active`, or `Failed`). After a key is listed, apply waits up to 300 seconds
+for `Active` or `Failed`. Expiry is not an error: apply returns the
+re-inspected plan, the key is in `unverified`, and the CLI reports an
+inconclusive result (exit 7, coverage incomplete per §8) instead of success.
 
 The opt-in command below creates and removes only an empty, randomly named
 DEV fixture namespace; the environment-file path is a placeholder:
@@ -372,7 +396,8 @@ with explicitly declared second resolution. Export checks metadata compatibility
 The PostgreSQL adapter maps text to bounded varchar, integer to signed int32,
 decimal to numeric(precision, scale), UUID to uuid, date to date, and instant
 to timestamp(0) with time zone. It creates a new dedicated schema, all tables,
-initially deferred foreign keys, then rows in deterministic entity order.
+a `UNIQUE` constraint named `__unverse_key_<key>` per alternate key, initially
+deferred foreign keys, then rows in deterministic entity order.
 Deferred constraints permit cycles with preserved IDs. Dataverse fixture
 seeding uses a separate entities-then-links sequence; it is not a public
 reverse-import command.
@@ -386,8 +411,12 @@ committed target is rejected instead of overwritten. There is no automatic
 write retry or per-row checkpointing. A lost connection may make the commit
 outcome unknown; a fresh invocation resolves it through the checkpoint.
 
+Seed, export, and transfer normalization reject a dataset in which two rows of
+an entity share an alternate key tuple, before any write. Comparison is exact:
+Dataverse text keys may also collide when only the case differs.
+
 Verification compares row counts, IDs and identity maps, references, decimal
-and temporal values, SQL types, text lengths, decimal precision/scale,
+and temporal values, alternate key constraints, SQL types, text lengths, decimal precision/scale,
 nullability, timestamp precision, and relationship definitions. Read-only
 verification across tables is not a transaction snapshot. Reports explicitly
 exclude workflows, plugins, auditing, policies, files, and unmodeled semantics.

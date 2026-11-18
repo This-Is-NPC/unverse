@@ -1,6 +1,7 @@
 import {
   type Column,
   type IdentityMap,
+  type Key,
   parseManifest,
   postgresSchemaName,
   preservedIdentities,
@@ -83,6 +84,11 @@ export class PostgresStore {
           `CREATE TABLE ${this.table(entity.name)} (${columns.join(", ")})`,
         );
       }
+      for (const entity of manifest.model.entities)
+        for (const key of entity.keys ?? [])
+          await this.client.query(
+            `ALTER TABLE ${this.table(entity.name)} ADD CONSTRAINT ${quote(keyConstraint(key))} UNIQUE (${key.columns.map(quote).join(", ")})`,
+          );
       for (const entity of manifest.model.entities)
         for (const column of entity.columns) {
           if (column.references === undefined) continue;
@@ -195,6 +201,23 @@ export class PostgresStore {
         "SELECT c.conname, pg_get_expr(c.conbin,c.conrelid) AS expression FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=$1 AND t.relname=$2 AND c.contype='c' AND c.convalidated",
         [this.schema, entity.name],
       );
+      const uniques = await this.client.query(
+        "SELECT c.conname, array_agg(a.attname::text) AS columns FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum = ANY(c.conkey) WHERE n.nspname=$1 AND t.relname=$2 AND c.contype='u' GROUP BY c.conname",
+        [this.schema, entity.name],
+      );
+      for (const key of entity.keys ?? [])
+        if (
+          !uniques.rows.some(
+            (row) =>
+              row.conname === keyConstraint(key) &&
+              [...row.columns].sort().join(",") === key.columns.join(","),
+          )
+        )
+          differences.push({
+            kind: "schema-key",
+            entity: entity.name,
+            column: key.name,
+          });
       if (
         keys.rows.length !== 1 ||
         keys.rows[0]?.column_name !== entity.primaryKey
@@ -300,6 +323,10 @@ export class PostgresStore {
   private table(name: string): string {
     return `${quote(this.schema)}.${quote(name)}`;
   }
+}
+
+function keyConstraint(key: Key): string {
+  return `__unverse_key_${key.name}`;
 }
 
 function quote(value: string): string {

@@ -29,11 +29,17 @@ export interface Column {
   }[];
 }
 
+export interface Key {
+  readonly name: string;
+  readonly columns: readonly string[];
+}
+
 export interface Entity {
   readonly name: string;
   readonly primaryKey: string;
   readonly primaryName: string;
   readonly columns: readonly Column[];
+  readonly keys?: readonly Key[];
 }
 
 export interface SchemaModel {
@@ -68,7 +74,7 @@ export function parseModel(input: unknown): SchemaModel {
   const entities: Entity[] = model.entities
     .map((value) => {
       const entity = record(value);
-      keys(entity, ["name", "primaryKey", "primaryName", "columns"]);
+      keys(entity, ["name", "primaryKey", "primaryName", "columns", "keys"]);
       if (!Array.isArray(entity.columns) || entity.columns.length === 0)
         fail("An entity requires columns.");
       const columns = entity.columns.map(parseColumn).sort(byName);
@@ -90,7 +96,15 @@ export function parseModel(input: unknown): SchemaModel {
         primaryKey === primaryName
       )
         fail("The primary name must be required text.");
-      return { name: name(entity.name), primaryKey, primaryName, columns };
+      const alternateKeys =
+        entity.keys === undefined ? [] : parseKeys(entity.keys, columns);
+      return {
+        name: name(entity.name),
+        primaryKey,
+        primaryName,
+        columns,
+        ...(alternateKeys.length === 0 ? {} : { keys: alternateKeys }),
+      };
     })
     .sort(byName);
   unique(entities.map((entity) => entity.name));
@@ -103,6 +117,54 @@ export function parseModel(input: unknown): SchemaModel {
         fail("A reference must name an entity in the model.");
     }
   return { modelVersion: 1, entities };
+}
+
+const keyTypes: readonly ColumnType[] = [
+  "text",
+  "integer",
+  "decimal",
+  "date",
+  "instant",
+  "choice",
+];
+
+function parseKeys(input: unknown, columns: readonly Column[]): Key[] {
+  if (!Array.isArray(input) || input.length === 0 || input.length > 10)
+    fail("An entity declares between one and ten alternate keys.");
+  const parsed = input.map((value): Key => {
+    const key = record(value);
+    keys(key, ["name", "columns"]);
+    if (
+      !Array.isArray(key.columns) ||
+      key.columns.length === 0 ||
+      key.columns.length > 16
+    )
+      fail("An alternate key requires between one and sixteen columns.");
+    const names = key.columns.map(name).sort();
+    unique(names);
+    for (const columnName of names) {
+      const column = columns.find((candidate) => candidate.name === columnName);
+      if (column === undefined)
+        fail("An alternate key column must exist on its entity.");
+      if (column.nullable) fail("An alternate key column must be required.");
+      if (
+        !keyTypes.includes(column.type) &&
+        !(column.type === "uuid" && column.references !== undefined) &&
+        !(column.type === "uuid" && column.externalReference !== undefined)
+      )
+        throw new SchemaError(
+          "unsupported",
+          "Dataverse alternate keys support text, integer, decimal, date, instant, choice, and lookup columns.",
+        );
+    }
+    return { name: name(key.name), columns: names };
+  });
+  unique(parsed.map((key) => key.name));
+  if (
+    new Set(parsed.map((key) => key.columns.join(","))).size !== parsed.length
+  )
+    fail("Two alternate keys cannot use the same columns.");
+  return parsed.sort(byName);
 }
 
 export function parseMapping(input: unknown): DataverseMapping {
@@ -263,6 +325,10 @@ export function physicalEntity(
   entity: Entity,
 ): string {
   return `${mapping.prefix}_${entity.name}`;
+}
+
+export function physicalKey(mapping: DataverseMapping, key: Key): string {
+  return `${mapping.prefix}_${key.name}`;
 }
 
 export function physicalColumn(

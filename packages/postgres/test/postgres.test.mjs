@@ -251,3 +251,49 @@ test("PostgreSQL preserves multiline text and enforces choice definitions", asyn
       await client.end();
     }
   }));
+
+test("PostgreSQL enforces alternate keys and verification detects a removed key", async () =>
+  withPostgres(async (connection) => {
+    const keyed = parseModel({
+      ...model,
+      entities: model.entities.map((entity) =>
+        entity.name === "parent"
+          ? {
+              ...entity,
+              keys: [{ name: "by_name", columns: ["name"] }],
+            }
+          : entity,
+      ),
+    });
+    const keyedData = structuredClone(data);
+    const selected = await createManifest(
+      keyed,
+      keyedData,
+      manifest.source.environment,
+      manifest.source.mapping,
+    );
+    const store = new PostgresStore(connection, "fixture");
+    const client = new Client(connection);
+    try {
+      assert.equal((await store.import(selected, true)).verified, true);
+      await client.connect();
+      await assert.rejects(
+        client.query(
+          "INSERT INTO fixture.parent (id, name) VALUES (gen_random_uuid(), 'Synthetic Parent')",
+        ),
+        /unique constraint/,
+      );
+      await client.query(
+        'ALTER TABLE fixture.parent DROP CONSTRAINT "__unverse_key_by_name"',
+      );
+      const report = await store.verify(selected);
+      assert.equal(report.verified, false);
+      assert.deepEqual(
+        report.differences.filter((entry) => entry.kind === "schema-key"),
+        [{ kind: "schema-key", entity: "parent", column: "by_name" }],
+      );
+    } finally {
+      await store.close();
+      await client.end();
+    }
+  }));

@@ -1,5 +1,6 @@
 import {
   type Column,
+  canonical,
   record,
   SchemaError,
   type SchemaModel,
@@ -57,6 +58,15 @@ export function normalizeDataset(model: SchemaModel, input: unknown): Dataset {
           String(b[entity.primaryKey]),
         ),
       );
+    for (const key of entity.keys ?? []) {
+      const tuples = new Set(
+        normalized[entity.name]?.map((row) =>
+          canonical(key.columns.map((column) => row[column])),
+        ),
+      );
+      if (tuples.size !== normalized[entity.name]?.length)
+        invalid(`Duplicate alternate key ${entity.name}.${key.name}.`);
+    }
   }
   for (const entity of model.entities)
     for (const column of entity.columns) {

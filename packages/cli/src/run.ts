@@ -536,8 +536,9 @@ export async function runCli(
               : undefined;
       const unfinished =
         command === "schema apply" &&
-        ((record(data).operations as readonly unknown[]).length !== 0 ||
-          (record(data).blocked as readonly unknown[]).length !== 0);
+        ["operations", "blocked", "unverified"].some(
+          (field) => (record(data)[field] as readonly unknown[]).length !== 0,
+        );
       return emit(
         {
           ...base,
